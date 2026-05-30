@@ -1,0 +1,5 @@
+.cluade/sessions/
+.cluade/last_session
+.cluade/config.json
+*.swp
+*~
