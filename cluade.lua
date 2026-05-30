@@ -183,9 +183,10 @@ if args.continue_session then
   end
   print("continuing session " .. last_id)
 elseif args.resume then
-  local ok, err = pcall(function() session = Store.load_session(sessions_dir, args.resume) end)
-  if not ok then
-    print("Failed to load session " .. args.resume .. ": " .. tostring(err))
+  local id = args.resume:gsub("%.json$", "")
+  local ok, err = pcall(function() session = Store.load_session(sessions_dir, id) end)
+  if not ok or not session then
+    print("Failed to load session " .. id .. ": " .. tostring(err or session))
     os.exit(1)
   end
   print("resumed session " .. args.resume)
