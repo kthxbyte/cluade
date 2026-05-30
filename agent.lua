@@ -33,6 +33,22 @@ function Agent:prompt_yes_no(question)
   return answer and answer:lower():match("^y")
 end
 
+function Agent:_read_instructions()
+  local files = { "CLAUDE.md", "AGENTS.md", "GEMINI.md" }
+  for _, name in ipairs(files) do
+    local path = self.cwd .. "/" .. name
+    local f = io.open(path, "r")
+    if f then
+      local content = f:read("*a")
+      f:close()
+      if #content > 0 then
+        return "User instructions (from ./" .. name .. "):\n" .. content
+      end
+    end
+  end
+  return nil
+end
+
 function Agent:run(session, input)
   local provider = require("provider")
   local HttpProvider = provider
@@ -54,6 +70,11 @@ function Agent:run(session, input)
       lines[#lines + 1] = "- " .. s.name .. ": " .. (s.description:sub(1, 80))
     end
     messages[1].content = messages[1].content .. "\n\nAvailable skills (use skill() to load):\n" .. table.concat(lines, "\n")
+  end
+
+  local instructions = self:_read_instructions()
+  if instructions then
+    messages[1].content = messages[1].content .. "\n\n" .. instructions
   end
 
   if input then
