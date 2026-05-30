@@ -120,7 +120,11 @@ local function _parse_number(str, i)
     if str:sub(j, j) == '+' or str:sub(j, j) == '-' then j = j + 1 end
     while str:sub(j, j):match('%d') do j = j + 1 end
   end
-  return tonumber(str:sub(i, j - 1)), j
+  local n = tonumber(str:sub(i, j - 1))
+  if not n then
+    error('invalid number at ' .. i .. ': ' .. str:sub(i, j - 1))
+  end
+  return n, j
 end
 
 local _parse_object, _parse_array
@@ -143,8 +147,10 @@ local function _parse_value(str, i)
   elseif c == 'n' then
     if str:sub(i, i + 3) ~= 'null' then error('expected null at ' .. i) end
     return json.null, i + 4
-  else
+  elseif c == '-' or c:match('^[0-9]') then
     return _parse_number(str, i)
+  else
+    error('unexpected character at ' .. i .. ': ' .. string.format('%q', c))
   end
 end
 
