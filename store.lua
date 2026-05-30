@@ -42,6 +42,7 @@ function Store.load_config(project_dir)
     model = "gpt-4o",
     api_key = "",
     max_steps = 20,
+    max_tokens = 131072,
     context_limit = 200000,
     compact_threshold = 0.85,
     permissions = { bash = "ask", remote_bash = "ask", write = "ask" },

@@ -98,7 +98,7 @@ function Agent:run(session, input)
     io.flush()
 
     local t0 = os.time()
-    local response, err = llm:chat(messages, tool_defs, { timeout = 120, max_tokens = 4096 })
+    local response, err = llm:chat(messages, tool_defs, { timeout = 120, max_tokens = self.config.max_tokens or 131072 })
     local elapsed = os.time() - t0
 
     if not response then
