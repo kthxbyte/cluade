@@ -63,9 +63,9 @@ Tools._scan_skills = _scan_skills
 
 local DEFAULT_PERMISSIONS = {
   read       = "allow",
-  write      = "ask",
+  write      = "allow",
   edit       = "allow",
-  bash       = "ask",
+  bash       = "allow",
   glob       = "allow",
   grep       = "allow",
   web_search = "allow",
