@@ -14,6 +14,7 @@ local ESCAPES = {
 local ESC_REV = {b='\b', f='\f', n='\n', r='\r', t='\t'}
 
 local function _encode_string(s)
+  s = s:gsub('\0', '')  -- strip null bytes (DeepSeek rejects \u0000)
   return '"' .. s:gsub('[%c"\\\127-\255]', function(c)
     local b = string.byte(c)
     if b < 0x20 or b == 0x7f then
