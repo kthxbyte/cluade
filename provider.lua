@@ -70,7 +70,11 @@ function HttpProvider:chat(messages, tools, options)
 
   local success, parsed = pcall(json.decode, raw)
   if not success or not parsed then
-    return nil, "failed to parse response (HTTP " .. http_code .. "): " .. tostring(parsed or raw:sub(1, 200))
+    local detail = tostring(parsed or "")
+    if not success then
+      detail = detail .. " | body: " .. raw:sub(1, 300)
+    end
+    return nil, "failed to parse response (HTTP " .. http_code .. "): " .. detail
   end
 
   if http_code ~= 200 then
