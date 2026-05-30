@@ -14,13 +14,12 @@ local ESCAPES = {
 local ESC_REV = {b='\b', f='\f', n='\n', r='\r', t='\t'}
 
 local function _encode_string(s)
-  s = s:gsub('\0', '')  -- strip null bytes (DeepSeek rejects \u0000)
-  return '"' .. s:gsub('[%c"\\\127-\255]', function(c)
-    local b = string.byte(c)
-    if b < 0x20 or b == 0x7f then
-      return string.format('\\u%04x', b)
-    end
-    return ESCAPES[c] or c
+  s = s:gsub('\0', '')     -- strip null bytes
+  s = s:gsub("[" .. string.char(127) .. "-" .. string.char(255) .. "]", '?')  -- replace non-ASCII
+  return '"' .. s:gsub('[%c"\\]', function(c)
+    local esc = ESCAPES[c]
+    if esc then return esc end
+    return string.format('\\u%04x', string.byte(c))
   end) .. '"'
 end
 
