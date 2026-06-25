@@ -40,7 +40,9 @@ function HttpProvider:chat(messages, tools, options)
   local esc = function(s) return "'" .. s:gsub("'", "'\\''") .. "'" end
   local errf = os.tmpname()
   -- -sS: silent progress but still print transport errors (to stderr).
-  local cmd = "curl -sS -w '\\n%{http_code}' --max-time " .. (options.timeout or 60)
+  -- --http1.1: avoid curl exit 92 (HTTP/2 PROTOCOL_ERROR) when the server or an
+  -- intermediate proxy resets the HTTP/2 stream on long-running requests.
+  local cmd = "curl -sS --http1.1 -w '\\n%{http_code}' --max-time " .. (options.timeout or 60)
     .. " -X POST " .. esc(url)
     .. " -H 'Content-Type: application/json'"
     .. " -d @" .. esc(tmpf)
