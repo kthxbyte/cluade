@@ -146,7 +146,7 @@ if args.init then
     base_url = config.base_url,
     model = config.model,
     api_key = config.api_key,
-    max_steps = 20,
+    max_steps = 50,
     max_tokens = 131072,
     request_timeout = 600,
     permissions = { bash = "ask", remote_bash = "ask", write = "ask" },
@@ -208,11 +208,12 @@ end
 
 if args.prompt then
   agent:run(session, args.prompt)
-  local est_total = session.total_tokens or 0
+  local used = session.total_tokens or 0
+  local ctx = session.context_tokens or 0
   local context_limit = config.context_limit or 200000
-  local pct = math.floor(est_total / context_limit * 100 * 10) / 10
+  local pct = math.floor(ctx / context_limit * 100 * 10) / 10
   print(c.dim(string.format("-- %s - %d tokens - %.1f%% context",
-    config.model or "?", est_total, pct)))
+    config.model or "?", used, pct)))
 else
   print(c.cyan("cluade session " .. session.id .. " -- " .. (config.model or "?")))
   print(c.dim("Type /help for commands, Ctrl+D to exit"))
@@ -244,11 +245,12 @@ else
           local t0 = os.time()
           agent:run(session, line)
           local elapsed = os.time() - t0
-          local est_total = session.total_tokens or 0
+          local used = session.total_tokens or 0
+          local ctx = session.context_tokens or 0
           local context_limit = config.context_limit or 200000
-          local pct = math.floor(est_total / context_limit * 100 * 10) / 10
+          local pct = math.floor(ctx / context_limit * 100 * 10) / 10
           print(c.dim(string.format("-- %s - %d tokens - %.1f%% context - %ds",
-            config.model or "?", est_total, pct, elapsed)))
+            config.model or "?", used, pct, elapsed)))
         end
       end
     end

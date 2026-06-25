@@ -93,7 +93,10 @@ function Agent:run(session, input)
     return total
   end
 
+  local stopped_reason = "limit"
+  local last_step = 0
   for step = 1, self.config.max_steps do
+    last_step = step
     io.write(c.step("[step " .. step .. "/" .. self.config.max_steps .. "] thinking..."))
     io.flush()
 
@@ -103,6 +106,7 @@ function Agent:run(session, input)
 
     if not response then
       io.write("\n" .. c.red("[provider error: " .. err .. "]") .. "\n")
+      stopped_reason = "error"
       break
     end
 
@@ -205,6 +209,7 @@ function Agent:run(session, input)
       end
     elseif response.finish_reason == "stop" then
       io.write("\n")
+      stopped_reason = "done"
       break
     end
 
@@ -217,13 +222,20 @@ function Agent:run(session, input)
     end
   end
 
+  if stopped_reason == "limit" then
+    io.write(c.yellow(string.format(
+      "\n[stopped at step limit (%d/%d). Task may be incomplete -- send 'continue' to resume.]",
+      last_step, self.config.max_steps)) .. "\n")
+  end
+
   local new_messages = {}
   for _, m in ipairs(messages) do
     new_messages[#new_messages + 1] = m
   end
   session.messages = new_messages
-  session.steps = step
+  session.steps = last_step
   session.total_tokens = total_tokens
+  session.context_tokens = _estimate_total()
   Store.save_session(self.config.sessions_dir, session.id, session)
 end
 
