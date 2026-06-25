@@ -74,6 +74,23 @@ local function _read_csi()
   return buf, ch or ""
 end
 
+-- Real terminal width. COLUMNS is a bash variable that is NOT exported to child
+-- processes, so os.getenv("COLUMNS") is usually nil here and the old default of
+-- 80 made the redraw scroll once per character whenever the real window was
+-- narrower than 80. Ask the tty directly instead.
+local function _term_cols()
+  local f = io.popen("stty size 2>/dev/null </dev/tty")
+  if f then
+    local out = f:read("*a") or ""
+    f:close()
+    local cols = tonumber(out:match("%d+%s+(%d+)"))
+    if cols and cols > 0 then return cols end
+  end
+  local env = tonumber(os.getenv("COLUMNS"))
+  if env and env > 0 then return env end
+  return 80
+end
+
 function lineedit.init()
   is_tty = (os.execute("test -t 0 2>/dev/null") == 0)
   return is_tty
@@ -96,11 +113,11 @@ function lineedit.readline(prompt)
   local paste_buf = nil  -- non-nil = accumulating pasted text
   local cursor_row = 0   -- cursor's current row offset below the first input row
   local pw = _visual_width(prompt)
+  local term_w = _term_cols()   -- query the real width once per prompt
 
   io.flush()
 
   local function refresh()
-    local term_w = tonumber(os.getenv("COLUMNS")) or 80
     local out, new_row = _render(prompt, pw, line, pos, term_w, cursor_row)
     io.write(out)
     io.flush()
@@ -244,6 +261,7 @@ end
 
 -- test seams (not used at runtime)
 lineedit._render = _render
+lineedit._term_cols = _term_cols
 function lineedit._set_tty(v) is_tty = v end
 
 return lineedit

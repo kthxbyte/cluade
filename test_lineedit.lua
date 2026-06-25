@@ -69,4 +69,9 @@ ok(select(2, line:gsub(pasted, "")) == 1, "buffer contains the text exactly once
 ok(not emitted:find("\27%[u"), "e2e: no ESC[u emitted during paste")
 ok(not emitted:find("\27%[s"), "e2e: no ESC[s emitted during paste")
 
+-- 8. Width detection returns a sane positive number (never 0/nil that would
+--    make the redraw math divide the line into bogus rows).
+local cols = le._term_cols()
+ok(type(cols) == "number" and cols > 0, "_term_cols returns a positive width (" .. tostring(cols) .. ")")
+
 if fail == 0 then print("\nALL PASS") else print("\n" .. fail .. " FAILED"); os.exit(1) end
