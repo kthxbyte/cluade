@@ -148,6 +148,7 @@ if args.init then
     api_key = config.api_key,
     max_steps = 20,
     max_tokens = 131072,
+    request_timeout = 600,
     permissions = { bash = "ask", remote_bash = "ask", write = "ask" },
   }) .. "\n")
   f:close()

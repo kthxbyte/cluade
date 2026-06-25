@@ -38,7 +38,9 @@ function HttpProvider:chat(messages, tools, options)
   f:close()
 
   local esc = function(s) return "'" .. s:gsub("'", "'\\''") .. "'" end
-  local cmd = "curl -s -w '\\n%{http_code}' --max-time " .. (options.timeout or 60)
+  local errf = os.tmpname()
+  -- -sS: silent progress but still print transport errors (to stderr).
+  local cmd = "curl -sS -w '\\n%{http_code}' --max-time " .. (options.timeout or 60)
     .. " -X POST " .. esc(url)
     .. " -H 'Content-Type: application/json'"
     .. " -d @" .. esc(tmpf)
@@ -46,17 +48,33 @@ function HttpProvider:chat(messages, tools, options)
     cmd = cmd .. " -H " .. esc("Authorization: Bearer " .. self._config.api_key)
   end
 
-  local pf = io.popen(cmd .. " 2>&1")
+  -- Capture curl's stderr in a file and its exit code via a trailing stdout
+  -- marker: Lua 5.1's popen:close() does not return the child exit status.
+  local pf = io.popen(cmd .. " 2>" .. esc(errf) .. "; printf '\\n__CURL_EXIT__%s' \"$?\"")
   if not pf then
     os.remove(tmpf)
+    os.remove(errf)
     return nil, "curl execution failed"
   end
-  local output = pf:read("*a")
+  local output = pf:read("*a") or ""
   pf:close()
   os.remove(tmpf)
 
-  if not output or #output == 0 then
-    return nil, "empty response from API"
+  local curl_exit = output:match("__CURL_EXIT__(%d+)%s*$")
+  output = output:gsub("\n?__CURL_EXIT__%d+%s*$", "")
+  local curl_err = ""
+  local ef = io.open(errf, "r")
+  if ef then curl_err = (ef:read("*a") or ""):gsub("%s+$", ""); ef:close() end
+  os.remove(errf)
+
+  local function _curl_detail()
+    local d = "curl exit " .. tostring(curl_exit)
+    if curl_err ~= "" then d = d .. ": " .. curl_err end
+    return d
+  end
+
+  if #output == 0 then
+    return nil, "empty response from API (" .. _curl_detail() .. ")"
   end
 
   local lines = {}
@@ -64,8 +82,12 @@ function HttpProvider:chat(messages, tools, options)
   local http_code = tonumber(lines[#lines])
   local raw = table.concat(lines, "\n", 1, #lines - 1)
 
-  if not http_code then
-    return nil, "no HTTP status: " .. output:sub(1, 200)
+  -- A non-zero curl exit means the transfer failed even if a status line was
+  -- already received: a timeout (exit 28) can yield "HTTP 200" with a truncated
+  -- or empty body. http_code 0 (and no body) means no transaction completed at
+  -- all: connection reset (56), empty reply (52), TLS error (35), connect (7).
+  if (curl_exit and curl_exit ~= "0") or not http_code or http_code == 0 then
+    return nil, "request failed (HTTP " .. tostring(http_code) .. ", " .. _curl_detail() .. ")"
   end
 
   local success, parsed = pcall(json.decode, raw)
@@ -74,7 +96,7 @@ function HttpProvider:chat(messages, tools, options)
     if not success then
       detail = detail .. " | body: " .. raw:sub(1, 300)
     end
-    return nil, "failed to parse response (HTTP " .. http_code .. "): " .. detail
+    return nil, "failed to parse response (HTTP " .. http_code .. ", " .. _curl_detail() .. "): " .. detail
   end
 
   if http_code ~= 200 then

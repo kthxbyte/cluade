@@ -43,6 +43,7 @@ function Store.load_config(project_dir)
     api_key = "",
     max_steps = 20,
     max_tokens = 131072,
+    request_timeout = 600,
     context_limit = 200000,
     compact_threshold = 0.85,
     permissions = { bash = "ask", remote_bash = "ask", write = "ask" },
