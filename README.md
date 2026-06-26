@@ -20,6 +20,7 @@
 ├── cluade.lua       # Entry point, CLI parsing, REPL loop
 ├── agent.lua        # Agent loop: LLM interaction, tool orchestration
 ├── loopdetect.lua   # Loop detection (warn-then-stop) for the agent loop
+├── dangercheck.lua  # Detects catastrophic bash commands (smart permission gate)
 ├── provider.lua     # HTTP provider for OpenAI-compatible chat API
 ├── store.lua        # Config loading, session persistence
 ├── tools.lua        # Tool definitions, permissions, executors, skill scanner
@@ -175,6 +176,26 @@ after `Agent:init`. Effective precedence: `tools.lua` defaults < config < `--yes
 switches to cooked (canonical + echo) for the read, then restores the prior mode.
 This keeps the answer visible and line-editable even when the interactive REPL
 has left the terminal in raw (`-icanon -echo`) mode.
+
+**Smart bash gate (`dangercheck.lua`).** Even when `bash` is `allow`, a
+catastrophic command is escalated to a one-time `[y/N]` prompt (the prompt shows
+the flag reason). Only an *allowed* bash call is gated — `deny` is never
+downgraded, an already-`ask` tool is unchanged, and non-bash tools are untouched.
+The detector is deliberately conservative (it protects against an irreversible
+model mistake without babysitting): it flags only
+
+- `rm -rf` (recursive + force) targeting a system/root/home path (`/`, `~`,
+  `$HOME`, `/etc`, …) or a bare `*`/`.`/`..` — but **not** a relative or `/tmp`
+  path, so `rm -rf ./build` runs silently;
+- `dd ... of=/dev/…` and shell redirects onto a raw block device
+  (`/dev/sd*`, `/dev/mmcblk*`, `/dev/nvme*`, …) — but **not** `dd` to a file or
+  `> /dev/null`;
+- `mkfs[.fs]`, power-state commands (`shutdown`/`reboot`/`halt`/`poweroff`), and
+  the classic fork bomb.
+
+It prefers false negatives to false positives: an obfuscated destructive command
+can slip through, which is acceptable because the model is an occasional bungler,
+not an adversary trying to evade the check.
 
 ---
 
@@ -346,6 +367,7 @@ bogus values like 288%.
 6. **Chrome 147 UA** — web_search and web_fetch spoof a Chrome user-agent to avoid bot blocking.
 7. **ANSI colors** — cyan prompt, green tool labels, magenta status bar, red errors.
 8. **Loop detection** — deterministic warn-then-stop guard (`loopdetect.lua`, §4.5) replaces the old hard step cap: the model runs as long as it makes progress and is stopped only when it's actually stuck (identical calls or repeated errors). `config.max_steps` (default 100) remains as a high safety backstop.
+9. **Smart bash gate** — `bash` stays `allow` for flow, but a conservative detector (`dangercheck.lua`, §4.7) escalates only catastrophic, irreversible commands to a confirmation prompt. Protects against model error without babysitting; prefers false negatives to false positives.
 
 ---
 

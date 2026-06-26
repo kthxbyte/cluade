@@ -2,8 +2,21 @@ local json = require("vendor.json")
 local Store = require("store")
 local c = require("colors")
 local LoopDetect = require("loopdetect")
+local dangercheck = require("dangercheck")
 
 local Agent = {}
+
+-- Smart bash gate: even when bash is otherwise allowed, escalate a catastrophic
+-- command to a prompt. Only applies to an allowed bash call; never downgrades
+-- deny, never touches a tool already set to ask, never gates non-bash tools.
+-- Returns: effective_permission, flag_reason (reason is nil unless escalated).
+function Agent._effective_perm(base, name, params)
+  if base == "allow" and name == "bash" and type(params) == "table" and params.command then
+    local reason = dangercheck.match(params.command)
+    if reason then return "ask", reason end
+  end
+  return base, nil
+end
 
 local SYSTEM_PROMPT = [[You are cluade, a coding agent running on OpenWRT (busybox ash, Linux MIPS).
 You help the user with software engineering tasks.
@@ -177,7 +190,7 @@ function Agent:run(session, input)
       for _, tc in ipairs(response.tool_calls) do
         local fn = tc["function"]
         local name = fn.name
-        local perm = self.tools.get_permission(name)
+        local base_perm = self.tools.get_permission(name)
         local params = {}
         local args_str = fn.arguments
         if args_str and type(args_str) == "string" then
@@ -191,6 +204,9 @@ function Agent:run(session, input)
           for k, v in pairs(args_str) do params[k] = v end
         end
 
+        -- Smart bash gate may escalate an allowed-but-dangerous command to a prompt.
+        local perm, flagged = Agent._effective_perm(base_perm, name, params)
+
         local result = nil
         if perm == "deny" then
           io.write(string.format("\n" .. c.error("[denied: %s]") .. "\n", name))
@@ -199,6 +215,7 @@ function Agent:run(session, input)
           local prompt = name
           if name == "bash" then
             prompt = "bash: " .. (params.command and params.command:sub(1, 80) or "?")
+            if flagged then prompt = prompt .. c.yellow("  [flagged: " .. flagged .. "]") end
           elseif name == "remote_bash" then
             prompt = "remote_bash: " .. (params.username or "root") .. "@" .. (params.host or "?") .. ": " .. (params.command and params.command:sub(1, 60) or "?")
           elseif name == "write" then
