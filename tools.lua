@@ -374,7 +374,13 @@ function Tools.execute_glob(cwd, params)
   if not pattern:match("^/") then pattern = cwd .. "/" .. pattern end
   local cmd
   if recursive then
-    cmd = 'find "' .. pattern:match("^(.*)%*.*$") .. '" -path "' .. pattern .. '" 2>/dev/null | head -100'
+    -- Search from the directory portion BEFORE the first wildcard, matching the
+    -- trailing filename glob at any depth. ** collapses to * for find -name.
+    local fbase = pattern:match("^(.-)%*")
+    fbase = (fbase and fbase:gsub("/+$", "")) or cwd
+    if fbase == "" then fbase = "/" end
+    local name = pattern:match("([^/]*)$"):gsub("%*%*", "*")
+    cmd = 'find "' .. fbase .. '" -name "' .. name .. '" 2>/dev/null | head -100'
   else
     cmd = 'ls -d ' .. pattern .. ' 2>/dev/null | head -100'
   end

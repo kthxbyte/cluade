@@ -252,7 +252,7 @@ not an adversary trying to evade the check.
 
 **`bash`**: `cd <workdir> && <command>`, captures stdout+stderr, appends `[exit code: N]` on non-zero exit. 30-second timeout.
 
-**`glob`**: Detects `**` for recursive mode (uses `find -path`). Otherwise uses `ls -d`. Capped at 100 results.
+**`glob`**: Detects `**` for recursive mode — searches from the directory before the first wildcard with `find -name <trailing glob>` (matching at any depth). Otherwise uses `ls -d`. Capped at 100 results.
 
 **`grep`**: Runs `grep -rn` with optional `--include` filter, capped at 100 lines.
 
@@ -409,7 +409,7 @@ To add a **new skill**:
 2. **web_search parsing** — scrapes DuckDuckGo HTML; brittle against markup changes.
 3. **No streaming** — responses received in full; no progressive output.
 4. **Token estimation** — `#text / 3.5` is inaccurate for non-English or code-heavy content.
-5. **glob with `**`** — simplistic `find -path` approach.
+5. **glob with `**`** — collapses the trailing segment to a `find -name` glob; intermediate path structure in the pattern (e.g. `a/**/b/*.lua`) is not enforced, only the final name and the search root.
 6. **No multi-modal** — text-only; no image/file upload.
 7. **Session-only history** — arrow-key history is not persisted across sessions.
 8. **ASCII cursor positioning** — byte-based, not Unicode-aware; acceptable for CLI environment.
