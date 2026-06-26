@@ -90,4 +90,58 @@ do
   ok(step(d, { { "x" } }) == "warn", "repeat_threshold=2 warns on 2nd identical")
 end
 
+-- 9. signature(): JSON key order does not change the signature.
+do
+  local s1 = LoopDetect.signature("bash", { command = "ls", cwd = "/tmp" })
+  local s2 = LoopDetect.signature("bash", { cwd = "/tmp", command = "ls" })
+  ok(s1 == s2, "same args, different key order -> identical signature")
+end
+
+-- 10. signature(): different values still differ.
+do
+  local s1 = LoopDetect.signature("bash", { command = "ls" })
+  local s2 = LoopDetect.signature("bash", { command = "pwd" })
+  ok(s1 ~= s2, "different arg values -> different signatures")
+end
+
+-- 11. signature(): different tool name differs even with same args.
+do
+  local s1 = LoopDetect.signature("read", { path = "a" })
+  local s2 = LoopDetect.signature("grep", { path = "a" })
+  ok(s1 ~= s2, "different tool name -> different signatures")
+end
+
+-- 12. signature(): nested table key order also normalized.
+do
+  local s1 = LoopDetect.signature("x", { a = { p = 1, q = 2 }, b = 3 })
+  local s2 = LoopDetect.signature("x", { b = 3, a = { q = 2, p = 1 } })
+  ok(s1 == s2, "nested key order normalized too")
+end
+
+-- 13. signature(): array element order is preserved (it is meaningful).
+do
+  local s1 = LoopDetect.signature("x", { items = { "a", "b" } })
+  local s2 = LoopDetect.signature("x", { items = { "b", "a" } })
+  ok(s1 ~= s2, "array order is significant -> different signatures")
+end
+
+-- 14. signature(): a non-table arg (e.g. raw unparsed string) passes through.
+do
+  local s1 = LoopDetect.signature("bash", "{malformed")
+  local s2 = LoopDetect.signature("bash", "{malformed")
+  ok(s1 == s2, "string args compare equal when identical")
+  ok(LoopDetect.signature("bash", "{a") ~= LoopDetect.signature("bash", "{b"),
+    "distinct string args stay distinct (no false collapse)")
+end
+
+-- 15. normalized signatures actually drive the detector (integration).
+do
+  local d = LoopDetect.new()
+  local function call(args) return LoopDetect.signature("bash", args) end
+  d:record_call(call({ command = "ls", cwd = "/tmp" })); d:record_result(false)
+  d:record_call(call({ cwd = "/tmp", command = "ls" })); d:record_result(false)
+  d:record_call(call({ command = "ls", cwd = "/tmp" })); d:record_result(false)
+  ok(d:check() == "warn", "key-shuffled identical calls count as a repeat loop")
+end
+
 if fail == 0 then print("\nALL PASS") else print("\n" .. fail .. " FAILED"); os.exit(1) end

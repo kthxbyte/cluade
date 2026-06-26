@@ -8,6 +8,44 @@
 local LoopDetect = {}
 LoopDetect.__index = LoopDetect
 
+-- Serialize a value to a stable, canonical string so that two argument tables
+-- that differ only in key order produce the same text. Object keys are sorted;
+-- array order is preserved (it is semantically meaningful). The output is for
+-- comparison only -- it need not be valid JSON.
+local function canonical(v)
+  local t = type(v)
+  if t ~= "table" then
+    return string.format("%q", tostring(v))
+  end
+  -- Treat a table with contiguous 1..n integer keys as an array (order kept).
+  local n = 0
+  for _ in pairs(v) do n = n + 1 end
+  if n == #v then
+    local parts = {}
+    for i = 1, n do parts[i] = canonical(v[i]) end
+    return "[" .. table.concat(parts, ",") .. "]"
+  end
+  -- Otherwise an object: sort keys for order-independence.
+  local keys = {}
+  for k in pairs(v) do keys[#keys + 1] = k end
+  table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+  local parts = {}
+  for _, k in ipairs(keys) do
+    parts[#parts + 1] = tostring(k) .. "=" .. canonical(v[k])
+  end
+  return "{" .. table.concat(parts, ",") .. "}"
+end
+
+-- Build a comparison signature for a tool call. `args` may be a decoded table
+-- (key order normalized) or a raw string (passed through unchanged, so a call
+-- whose arguments failed to parse still keeps its distinct identity).
+function LoopDetect.signature(name, args)
+  if type(args) == "table" then
+    return name .. ":" .. canonical(args)
+  end
+  return name .. ":" .. tostring(args)
+end
+
 function LoopDetect.new(opts)
   opts = opts or {}
   return setmetatable({
