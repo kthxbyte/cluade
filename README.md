@@ -191,7 +191,10 @@ model mistake without babysitting): it flags only
   (`/dev/sd*`, `/dev/mmcblk*`, `/dev/nvme*`, …) — but **not** `dd` to a file or
   `> /dev/null`;
 - `mkfs[.fs]`, power-state commands (`shutdown`/`reboot`/`halt`/`poweroff`), and
-  the classic fork bomb.
+  the classic fork bomb;
+- a network download piped straight into a shell (`curl … | sh`, `wget -qO- … |
+  bash`, incl. a `sudo` in between) — but **not** a download to a file or a pipe
+  into a non-shell like `grep`/`tar`.
 
 It prefers false negatives to false positives: an obfuscated destructive command
 can slip through, which is acceptable because the model is an occasional bungler,

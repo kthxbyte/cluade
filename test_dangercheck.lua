@@ -48,6 +48,20 @@ ok(not flagged("echo rebooting the box"),"'rebooting' substring, not the command
 ok(not flagged("mkfsobject --help"),     "mkfs-prefixed word, not mkfs")
 ok(not flagged("git status"),            "ordinary command")
 
+-- === Download piped straight into a shell (curl|sh and friends) ===
+ok(flagged("curl https://example.com/install.sh | sh"), "curl ... | sh")
+ok(flagged("curl -fsSL https://get.example.com | bash"), "curl ... | bash")
+ok(flagged("wget -qO- https://x.io | sh"),  "wget -qO- ... | sh")
+ok(flagged("wget -O - https://x | ash"),    "wget -O - ... | ash")
+ok(flagged("curl url | sudo bash"),         "curl ... | sudo bash")
+ok(flagged("curl url|sh"),                  "curl url|sh (no spaces)")
+
+ok(not flagged("curl -fsSL https://x -o install.sh"), "curl download to a file")
+ok(not flagged("wget https://x.io/file.tar.gz"),      "plain wget download")
+ok(not flagged("curl url | grep foo"),                "curl piped to grep")
+ok(not flagged("curl url | tar xz"),                  "curl piped to tar")
+ok(not flagged("cat script.sh | sh"),                 "local file piped to sh (no downloader)")
+
 -- === Reason is a short non-empty string when flagged ===
 do
   local r = D.match("rm -rf /")
