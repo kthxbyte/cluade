@@ -2,6 +2,8 @@
 
 ## 1. Project Overview
 
+> **cluade** — **C**ompact **Lua** **De**veloper.
+
 **cluade** is a minimal coding agent written in Lua 5.1. Its focus is bringing the
 power of LLMs to **basic, constrained Linux devices** — OpenWRT routers, a Raspberry
 Pi, and similar hardware that may not be able to run a full-fledged Node.js or Python
