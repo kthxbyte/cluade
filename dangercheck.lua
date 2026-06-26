@@ -81,6 +81,46 @@ local function downloads_to_shell(cmd)
   return false
 end
 
+-- An exec trigger: a shell invoked with -c, or `eval`. These run their string
+-- argument as code, so a download substituted into that argument is executed.
+local function has_exec_trigger(cmd)
+  if has_word(cmd, "eval") then return true end
+  for _, sh in ipairs(SHELLS) do
+    if cmd:match("%f[%w]" .. sh .. "%s+%-c%f[%W]") then return true end
+  end
+  return false
+end
+
+-- A command substitution ($(...) or `...`) that contains a downloader.
+local function subst_has_download(cmd)
+  for _, d in ipairs(DOWNLOADERS) do
+    if cmd:match("%$%(.-" .. d) or cmd:match("`.-" .. d) then return true end
+  end
+  return false
+end
+
+-- A shell consuming a process substitution that contains a downloader:
+-- bash <(curl ...) / sh <(wget ...). Requires a SHELL before the <( -- a
+-- non-shell consumer like `diff <(curl a) <(curl b)` is not executing the body.
+local function procsub_to_shell(cmd)
+  for _, sh in ipairs(SHELLS) do
+    for _, d in ipairs(DOWNLOADERS) do
+      if cmd:match("%f[%w]" .. sh .. "%f[%W].-<%(.-" .. d) then return true end
+    end
+  end
+  return false
+end
+
+-- A network download executed by a shell, in any of its common disguises:
+-- pipe (curl|sh), command substitution under exec (sh -c "$(curl)", eval),
+-- or process substitution (bash <(curl)).
+local function download_run_by_shell(cmd)
+  if downloads_to_shell(cmd) then return true end
+  if has_exec_trigger(cmd) and subst_has_download(cmd) then return true end
+  if procsub_to_shell(cmd) then return true end
+  return false
+end
+
 function Danger.match(cmd)
   if type(cmd) ~= "string" then return nil end
 
@@ -117,9 +157,9 @@ function Danger.match(cmd)
     return "recursive force-remove of a sensitive path"
   end
 
-  -- Network download piped into a shell (curl ... | sh).
-  if downloads_to_shell(cmd) then
-    return "download piped into a shell"
+  -- Network download executed by a shell (curl|sh, sh -c "$(curl)", bash <(curl)).
+  if download_run_by_shell(cmd) then
+    return "download executed by a shell"
   end
 
   return nil
