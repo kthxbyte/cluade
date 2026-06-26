@@ -146,7 +146,7 @@ if args.init then
     base_url = config.base_url,
     model = config.model,
     api_key = config.api_key,
-    max_steps = 50,
+    max_steps = 100,
     max_tokens = 131072,
     request_timeout = 600,
     permissions = { bash = "ask", remote_bash = "ask", write = "ask" },

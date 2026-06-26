@@ -41,7 +41,7 @@ function Store.load_config(project_dir)
     base_url = "https://api.openai.com/v1",
     model = "gpt-4o",
     api_key = "",
-    max_steps = 50,
+    max_steps = 100,   -- safety backstop only; loop detection is the real guard
     max_tokens = 131072,
     request_timeout = 600,
     context_limit = 200000,
