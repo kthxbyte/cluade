@@ -211,10 +211,29 @@ not an adversary trying to evade the check.
 - Transport: **curl** via `io.popen` (no Lua HTTP library dependency). Invoked with
   `--http1.1` (avoids curl exit 92 / HTTP/2 `PROTOCOL_ERROR`) and `--max-time`
   set from `config.request_timeout` (default 600s).
-- Request body: `model`, `messages`, `tools`, `tool_choice`, `thinking = {type="enabled"}`, `reasoning_effort` (default `"max"`).
 - Response: parses JSON, extracts `content`, `reasoning_content`, `tool_calls`, `finish_reason`, `usage`.
 - Transport failures surface the curl exit code and stderr (e.g. `request failed
   (HTTP <code>, curl exit <n>: <stderr>)`) instead of being masked as JSON parse errors.
+
+### 5.1 Request body — the exact fields cluade sends
+
+The body is built from a **fixed** set of fields (`provider.lua:16–29`). There is
+**no** `extra_body` / passthrough mechanism — any config key not listed below is
+ignored. This is the source of truth for "how do I tune the API call":
+
+| Body field | Source | Notes |
+|---|---|---|
+| `model` | `config.model` | |
+| `messages` | conversation | |
+| `tools`, `tool_choice` | tool defs | only when tools are present; `tool_choice` is `"auto"` |
+| `thinking` | gated by `config.thinking` | **Boolean gate, not a passthrough.** If `config.thinking ~= false`, cluade sends the hardcoded `{type="enabled"}`. Set `"thinking": false` to turn reasoning **off**; any truthy value (or omitting it) leaves it **on**. The value itself is never forwarded. |
+| `reasoning_effort` | `config.reasoning_effort` | Sent only when thinking is on. **Defaults to `"max"`** — so you already get maximum reasoning effort with no config at all. DeepSeek accepts `"high"` or `"max"`. |
+| `max_tokens` | `config.max_tokens` | Forwarded as-is (default 131072). The model's real output cap is server-side; an over-large value yields a clear `HTTP 4xx`, not a silent failure. |
+| `temperature` | per-call options only | **Not read from config.** The agent never sets it, so it is effectively never sent (and is ignored by the API in thinking mode anyway). |
+
+**"Maximum effort" config:** none needed — `reasoning_effort` already defaults to
+`"max"`. To be explicit, set it top-level: `"reasoning_effort": "max"`. Do **not**
+wrap it in `extra_body` (that key does nothing).
 
 ---
 
@@ -332,6 +351,10 @@ No Python, no Node.js, no LuaSocket, no systemd — intentionally minimal.
 `max_steps` is a safety backstop only; loop detection (§4.5) is the real guard.
 The `permissions` block overrides the per-tool defaults from `tools.lua` (§4.7);
 list only the tools you want to change. The values shown above are the defaults.
+
+For how `thinking` / `reasoning_effort` / `max_tokens` actually reach the API
+(and why there is no `extra_body`), see §5.1. Unrecognized config keys are loaded
+but never used — they do not reach the request.
 
 ---
 
