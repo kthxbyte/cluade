@@ -1,6 +1,7 @@
 local json = require("vendor.json")
 local Store = require("store")
 local c = require("colors")
+local LoopDetect = require("loopdetect")
 
 local Agent = {}
 
@@ -95,9 +96,10 @@ function Agent:run(session, input)
 
   local stopped_reason = "limit"
   local last_step = 0
+  local detector = LoopDetect.new()
   for step = 1, self.config.max_steps do
     last_step = step
-    io.write(c.step("[step " .. step .. "/" .. self.config.max_steps .. "] thinking..."))
+    io.write(c.step("[step " .. step .. "] thinking..."))
     io.flush()
 
     local t0 = os.time()
@@ -195,6 +197,10 @@ function Agent:run(session, input)
           content = json.encode(result),
         }
 
+        local sig = name .. ":" .. (type(args_str) == "string" and args_str or json.encode(params))
+        detector:record_call(sig)
+        detector:record_result(result.status == "error")
+
         if name == "compact" and result.status == "compacted" then
           local compact_msg = SYSTEM_PROMPT .. "\n\n[Session compressed. Summary of prior work:\n"
             .. result.summary .. "\nCurrent state preserved: open files, decisions, next steps.]"
@@ -206,6 +212,25 @@ function Agent:run(session, input)
           messages = new_messages
           io.write(c.step("[Compacted: context freed for next task]") .. "\n")
         end
+      end
+
+      local action, reason = detector:check()
+      if action == "warn" then
+        local msg
+        if reason == "repeat" then
+          msg = "[cluade] You have called the same tool with identical arguments "
+            .. detector.repeat_threshold .. " times in a row. This looks like a loop."
+            .. " Change your approach, or stop if the task is already complete."
+        else
+          msg = "[cluade] The last " .. detector.error_threshold
+            .. " tool calls all returned errors. Reconsider your approach, or stop if you cannot proceed."
+        end
+        messages[#messages + 1] = { role = "user", content = msg }
+        io.write(c.yellow("\n[loop guard: warned the model (" .. reason .. ")]") .. "\n")
+      elseif action == "stop" then
+        stopped_reason = "loop"
+        io.write("\n")
+        break
       end
     elseif response.finish_reason == "stop" then
       io.write("\n")
@@ -224,8 +249,11 @@ function Agent:run(session, input)
 
   if stopped_reason == "limit" then
     io.write(c.yellow(string.format(
-      "\n[stopped at step limit (%d/%d). Task may be incomplete -- send 'continue' to resume.]",
-      last_step, self.config.max_steps)) .. "\n")
+      "\n[reached the safety backstop of %d steps. Task may be incomplete -- send 'continue' to resume.]",
+      self.config.max_steps)) .. "\n")
+  elseif stopped_reason == "loop" then
+    io.write(c.yellow(
+      "\n[stopped: the model appears stuck (repeated the same action or errored repeatedly). send 'continue' to resume.]") .. "\n")
   end
 
   local new_messages = {}
