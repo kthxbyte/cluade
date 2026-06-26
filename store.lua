@@ -38,8 +38,8 @@ end
 function Store.load_config(project_dir)
   local home = os.getenv("HOME") or os.getenv("USERPROFILE") or "/tmp"
   local defaults = {
-    base_url = "https://api.openai.com/v1",
-    model = "gpt-4o",
+    base_url = "https://api.deepseek.com/v1",
+    model = "deepseek-v4-pro",
     api_key = "",
     max_steps = 100,   -- safety backstop only; loop detection is the real guard
     max_tokens = 131072,

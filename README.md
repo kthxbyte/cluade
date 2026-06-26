@@ -19,6 +19,7 @@
 /root/cluade/
 ├── cluade.lua       # Entry point, CLI parsing, REPL loop
 ├── agent.lua        # Agent loop: LLM interaction, tool orchestration
+├── loopdetect.lua   # Loop detection (warn-then-stop) for the agent loop
 ├── provider.lua     # HTTP provider for OpenAI-compatible chat API
 ├── store.lua        # Config loading, session persistence
 ├── tools.lua        # Tool definitions, permissions, executors, skill scanner
@@ -118,29 +119,68 @@ At startup, `Agent:init()` scans `~/.cluade/skills/` and `./.cluade/skills/` for
 
 ### 4.4 Agent:run(session, input)
 
-Loop for `step = 1, config.max_steps` (default 20):
-1. Call `llm:chat(messages, tool_defs)` — captures `reasoning_content` (thinking mode output).
-2. If tool_calls: for each, check permission, prompt user if `ask`, execute, append result.
-3. If `finish_reason == "stop"` — break.
-4. At 85% context threshold: nudge LLM to call `compact(summary)` to free context.
-5. Persist session after each run.
+Before the first step, the agent reads project instructions (see §4.6) and lists
+discovered skills (§4.3) into the system prompt.
 
-### 4.5 Permission Model
+Each step (the on-screen counter is a plain `[step N]`, not `N/M`):
+1. Call `llm:chat(messages, tool_defs)` — captures `reasoning_content` (thinking mode output).
+2. If tool_calls: for each, check permission, prompt user if `ask`, execute, append result, and feed the call's normalized signature + error status to the loop detector (§4.5).
+3. After the step's tool calls, consult the loop detector — it may inject a warning to the model or stop the turn.
+4. If `finish_reason == "stop"` — break.
+5. At 85% context threshold: nudge LLM to call `compact(summary)` to free context.
+6. Persist session after each run.
+
+The loop runs until the model finishes (`stop`), the loop detector halts it, or
+the `config.max_steps` **safety backstop** is reached (default 100 — a defense-in-depth
+ceiling, not the primary guard). Each terminal condition prints a distinct message.
+
+### 4.5 Loop Detection (`loopdetect.lua`)
+
+Replaces the old hard step cap. A deterministic, boolean detector (no confidence
+scores) that watches two runaway patterns using **consecutive** counts, so any
+change in behavior resets the streak and keeps false positives near zero:
+
+- **Repeat loop** — the same tool with identical arguments called `repeat_threshold` (3) times in a row.
+- **Error loop** — tool results erroring `error_threshold` (4) times in a row; any success resets the count.
+
+Signatures are normalized via `LoopDetect.signature(name, args)`: object keys are
+sorted (order-independent), array order preserved (it's meaningful), and raw
+unparsed arg strings pass through unchanged (so a parse-failed call keeps its own
+identity). Comparison is literal string equality.
+
+Reaction is **warn-once-then-stop**: the first trip injects a user-role message
+telling the model it looks stuck (change approach or stop); if it's still tripped
+on the next check, the turn halts with a "send 'continue' to resume" message. If
+the model changes behavior after the warning, the trip disarms.
+
+### 4.6 Project Instructions
+
+Before the first step, `Agent:run` reads the first of `CLAUDE.md`, `AGENTS.md`,
+`GEMINI.md` found in `cwd` and appends its contents to the system prompt.
+
+### 4.7 Permission Model
 
 Three levels: `allow` (auto-execute), `ask` (prompt user `[y/N]`), `deny` (refuse with error).
 
-Defaults:
-- `allow`: `read`, `edit`, `glob`, `grep`, `web_search`, `web_fetch`, `compact`, `skill`
-- `ask`: `write`, `bash`, `remote_bash`
+Effective defaults come from `DEFAULT_PERMISSIONS` in `tools.lua`:
+- `allow`: `read`, `write`, `edit`, `bash`, `glob`, `grep`, `web_search`, `web_fetch`, `compact`, `skill`
+- `ask`: `remote_bash`
+
+`--yes` overrides `bash`, `remote_bash`, `write` to `allow`. (Note: the
+`permissions` block in `config.json` is not currently applied to the tools.)
 
 ---
 
 ## 5. Provider Module: `provider.lua`
 
 - Endpoint: `{base_url}/chat/completions`.
-- Transport: **curl** via `io.popen` (no Lua HTTP library dependency).
+- Transport: **curl** via `io.popen` (no Lua HTTP library dependency). Invoked with
+  `--http1.1` (avoids curl exit 92 / HTTP/2 `PROTOCOL_ERROR`) and `--max-time`
+  set from `config.request_timeout` (default 600s).
 - Request body: `model`, `messages`, `tools`, `tool_choice`, `thinking = {type="enabled"}`, `reasoning_effort` (default `"max"`).
 - Response: parses JSON, extracts `content`, `reasoning_content`, `tool_calls`, `finish_reason`, `usage`.
+- Transport failures surface the curl exit code and stderr (e.g. `request failed
+  (HTTP <code>, curl exit <n>: <stderr>)`) instead of being masked as JSON parse errors.
 
 ---
 
@@ -240,18 +280,19 @@ No Python, no Node.js, no LuaSocket, no systemd — intentionally minimal.
   "base_url": "https://api.deepseek.com/v1",
   "model": "deepseek-v4-pro",
   "api_key": "sk-...",
-  "max_steps": 20,
+  "max_steps": 100,
+  "max_tokens": 131072,
+  "request_timeout": 600,
   "thinking": true,
-  "reasoning_effort": "medium",
+  "reasoning_effort": "max",
   "context_limit": 200000,
-  "compact_threshold": 0.85,
-  "permissions": {
-    "bash": "ask",
-    "remote_bash": "ask",
-    "write": "ask"
-  }
+  "compact_threshold": 0.85
 }
 ```
+
+`max_steps` is a safety backstop only; loop detection (§4.5) is the real guard.
+A `permissions` block is accepted by config parsing but is **not currently
+applied** to the tools — per-tool defaults live in `tools.lua` (§4.7).
 
 ---
 
@@ -271,9 +312,15 @@ No Python, no Node.js, no LuaSocket, no systemd — intentionally minimal.
     {"role": "tool", "tool_call_id": "...", "content": "{...}"}
   ],
   "steps": 5,
-  "total_tokens": 12345
+  "total_tokens": 12345,
+  "context_tokens": 8200
 }
 ```
+
+`total_tokens` is the cumulative usage across the run; `context_tokens` is the
+estimated current context size (drives the status-bar `% context`). The two
+differ — using the cumulative total for the percentage previously reported
+bogus values like 288%.
 
 ---
 
@@ -286,7 +333,7 @@ No Python, no Node.js, no LuaSocket, no systemd — intentionally minimal.
 5. **SSH key-only** — remote_bash uses dropbear `ssh -y` with `~/.ssh/id_dropbear`. No sshpass, no passwords.
 6. **Chrome 147 UA** — web_search and web_fetch spoof a Chrome user-agent to avoid bot blocking.
 7. **ANSI colors** — cyan prompt, green tool labels, magenta status bar, red errors.
-8. **Max steps guard** — bounded by `config.max_steps` (default 20) to prevent infinite tool-calling loops.
+8. **Loop detection** — deterministic warn-then-stop guard (`loopdetect.lua`, §4.5) replaces the old hard step cap: the model runs as long as it makes progress and is stopped only when it's actually stuck (identical calls or repeated errors). `config.max_steps` (default 100) remains as a high safety backstop.
 
 ---
 
@@ -310,7 +357,7 @@ To add a **new skill**:
 |---------|-------|
 | `pcall(json.decode, ...)` | All JSON parsing is pcall-protected |
 | `pcall(executor, ...)` | Tool executors wrapped in `Tools.execute` |
-| Provider error bubbling | Non-200 or curl failure → `[provider error: ...]` |
+| Provider error bubbling | Non-200 or curl failure → `[provider error: ...]`, including curl exit code + stderr |
 | Session load failures | `pcall` around `Store.load_session` |
 | cbreak terminal cleanup | `pcall` wrap in REPL loop restores `stty icanon echo` on error |
 

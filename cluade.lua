@@ -70,8 +70,8 @@ cluade — minimal coding agent for constrained Linux environments
 Usage: cluade [options] [prompt]
 
 Options:
-  -m, --model MODEL       LLM model name (default: gpt-4o)
-  --base-url URL           API base URL (default: https://api.openai.com/v1)
+  -m, --model MODEL       LLM model name (default: deepseek-v4-pro)
+  --base-url URL           API base URL (default: https://api.deepseek.com/v1)
   --api-key KEY            API key (or set OPENAI_API_KEY env var)
   -c, --continue           Resume the most recent session
   -r, --resume ID          Resume a specific session by ID
