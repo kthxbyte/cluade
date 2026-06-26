@@ -171,6 +171,11 @@ A `permissions` block in `config.json` overrides these per-tool (applied in
 `remote_bash`, `write` to `allow` and takes precedence over both, since it runs
 after `Agent:init`. Effective precedence: `tools.lua` defaults < config < `--yes`.
 
+`ask` prompts go through `Agent:prompt_yes_no`, which saves the terminal mode,
+switches to cooked (canonical + echo) for the read, then restores the prior mode.
+This keeps the answer visible and line-editable even when the interactive REPL
+has left the terminal in raw (`-icanon -echo`) mode.
+
 ---
 
 ## 5. Provider Module: `provider.lua`
