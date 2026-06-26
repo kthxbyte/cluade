@@ -2,7 +2,22 @@
 
 -- cluade -- a minimal coding agent for OpenWRT / constrained Linux
 
-local script_dir = debug.getinfo(1, "S").source:match("@(.*/)") or "."
+-- The full path cluade was invoked as. For a symlink (e.g. /usr/local/bin/cluade)
+-- this is the LINK's path, not the real file -- so resolve it before deriving the
+-- module dir, otherwise `require` looks in the symlink's directory and fails.
+local src = debug.getinfo(1, "S").source:match("^@(.*)$") or "cluade.lua"
+local script_dir
+do
+  local sh_quote = "'" .. src:gsub("'", "'\\''") .. "'"
+  local f = io.popen("readlink -f " .. sh_quote .. " 2>/dev/null")
+  local real = f and f:read("*l")
+  if f then f:close() end
+  if real and #real > 0 then
+    script_dir = real:match("^(.*)/[^/]*$") or "."     -- dir of the resolved file
+  else
+    script_dir = src:match("^(.*)/[^/]*$") or "."       -- fallback: as-invoked dir
+  end
+end
 if script_dir:sub(1, 1) ~= "/" then
   local f = io.popen("pwd")
   script_dir = f:read("*l") .. "/" .. script_dir
