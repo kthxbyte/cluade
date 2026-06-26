@@ -192,9 +192,12 @@ model mistake without babysitting): it flags only
   `> /dev/null`;
 - `mkfs[.fs]`, power-state commands (`shutdown`/`reboot`/`halt`/`poweroff`), and
   the classic fork bomb;
-- a network download piped straight into a shell (`curl … | sh`, `wget -qO- … |
-  bash`, incl. a `sudo` in between) — but **not** a download to a file or a pipe
-  into a non-shell like `grep`/`tar`.
+- a network download executed by a shell, in any common disguise: a pipe
+  (`curl … | sh`, `wget -qO- … | bash`, incl. a `sudo` in between), command
+  substitution under an exec trigger (`sh -c "$(curl …)"`, `eval "$(curl …)"`,
+  backticks), or process substitution (`bash <(curl …)`) — but **not** a download
+  to a file, a pipe into a non-shell like `grep`/`tar`, a capture to a variable
+  (`v=$(curl …)`), or a process-sub into a non-shell (`diff <(curl a) <(curl b)`).
 
 It prefers false negatives to false positives: an obfuscated destructive command
 can slip through, which is acceptable because the model is an occasional bungler,

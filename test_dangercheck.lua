@@ -62,6 +62,21 @@ ok(not flagged("curl url | grep foo"),                "curl piped to grep")
 ok(not flagged("curl url | tar xz"),                  "curl piped to tar")
 ok(not flagged("cat script.sh | sh"),                 "local file piped to sh (no downloader)")
 
+-- === Download executed via command/process substitution ===
+ok(flagged('sh -c "$(curl https://x.io)"'),       'sh -c "$(curl ...)"')
+ok(flagged('bash -c "$(wget -qO- https://x)"'),   'bash -c "$(wget ...)"')
+ok(flagged('eval "$(curl https://x)"'),           'eval "$(curl ...)"')
+ok(flagged('sh -c "`curl https://x`"'),           'sh -c "`curl ...`" (backticks)')
+ok(flagged('sudo sh -c "$(curl https://x)"'),     'sudo sh -c "$(curl ...)"')
+ok(flagged('bash <(curl https://x)'),             'bash <(curl ...)')
+ok(flagged('sh <(wget -qO- https://x)'),          'sh <(wget ...)')
+
+ok(not flagged('version=$(curl -s https://x/version)'), 'capture to a variable')
+ok(not flagged('echo "$(curl -s https://x)"'),    'echo of a substitution (not a shell exec)')
+ok(not flagged('diff <(curl a) <(curl b)'),       'process-sub into diff, not a shell')
+ok(not flagged('sh -c "echo hello"'),             'sh -c without a download')
+ok(not flagged('bash <(echo ls)'),                'process-sub without a downloader')
+
 -- === Reason is a short non-empty string when flagged ===
 do
   local r = D.match("rm -rf /")
