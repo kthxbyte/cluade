@@ -46,7 +46,9 @@ function Store.load_config(project_dir)
     request_timeout = 600,
     context_limit = 200000,
     compact_threshold = 0.85,
-    permissions = { bash = "ask", remote_bash = "ask", write = "ask" },
+    -- No permissions default here: tools.lua's DEFAULT_PERMISSIONS is the single
+    -- source of truth. A config.json may override per-tool levels (applied in
+    -- Agent:init); absent that, the tool defaults stand.
   }
 
   local home_config_path = home .. "/.cluade/config.json"

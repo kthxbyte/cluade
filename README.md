@@ -166,8 +166,10 @@ Effective defaults come from `DEFAULT_PERMISSIONS` in `tools.lua`:
 - `allow`: `read`, `write`, `edit`, `bash`, `glob`, `grep`, `web_search`, `web_fetch`, `compact`, `skill`
 - `ask`: `remote_bash`
 
-`--yes` overrides `bash`, `remote_bash`, `write` to `allow`. (Note: the
-`permissions` block in `config.json` is not currently applied to the tools.)
+A `permissions` block in `config.json` overrides these per-tool (applied in
+`Agent:init`); only the tools you name change. `--yes` overrides `bash`,
+`remote_bash`, `write` to `allow` and takes precedence over both, since it runs
+after `Agent:init`. Effective precedence: `tools.lua` defaults < config < `--yes`.
 
 ---
 
@@ -286,13 +288,18 @@ No Python, no Node.js, no LuaSocket, no systemd — intentionally minimal.
   "thinking": true,
   "reasoning_effort": "max",
   "context_limit": 200000,
-  "compact_threshold": 0.85
+  "compact_threshold": 0.85,
+  "permissions": {
+    "bash": "allow",
+    "remote_bash": "ask",
+    "write": "allow"
+  }
 }
 ```
 
 `max_steps` is a safety backstop only; loop detection (§4.5) is the real guard.
-A `permissions` block is accepted by config parsing but is **not currently
-applied** to the tools — per-tool defaults live in `tools.lua` (§4.7).
+The `permissions` block overrides the per-tool defaults from `tools.lua` (§4.7);
+list only the tools you want to change. The values shown above are the defaults.
 
 ---
 

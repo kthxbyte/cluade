@@ -149,7 +149,7 @@ if args.init then
     max_steps = 100,
     max_tokens = 131072,
     request_timeout = 600,
-    permissions = { bash = "ask", remote_bash = "ask", write = "ask" },
+    permissions = { bash = "allow", remote_bash = "ask", write = "allow" },
   }) .. "\n")
   f:close()
   print("written " .. config_dir .. "/config.json")
