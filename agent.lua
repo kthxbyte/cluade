@@ -24,6 +24,12 @@ function Agent:init(config, cwd)
   self.config = config
   self.cwd = cwd
   self.tools = require("tools")
+  -- Apply config-provided permissions as overrides on top of the tool defaults.
+  -- Only the tools named in config change; everything else keeps tools.lua's
+  -- defaults. (cluade.lua's --yes runs after this, so it still wins.)
+  if type(config.permissions) == "table" then
+    self.tools.set_permissions(config.permissions)
+  end
   return self
 end
 
