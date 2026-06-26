@@ -2,13 +2,25 @@
 
 ## 1. Project Overview
 
-**cluade** is a minimal coding agent written in Lua, designed for constrained Linux environments (specifically OpenWRT with BusyBox ash, Linux MIPS). It provides an interactive or one-shot CLI that connects to an OpenAI-compatible LLM API, executes tool calls (filesystem, shell, web, SSH), and maintains session history.
+**cluade** is a minimal coding agent written in Lua 5.1. Its focus is bringing the
+power of LLMs to **basic, constrained Linux devices** — OpenWRT routers, a Raspberry
+Pi, and similar hardware that may not be able to run a full-fledged Node.js or Python
+software stack. The guiding observation: *all you really need to reach an LLM is HTTP
+and a JSON parser* — so cluade leans on `curl` and a single vendored `json.lua`
+instead of a heavy runtime or dependency tree.
+
+It provides an interactive or one-shot CLI that connects to **any OpenAI-compatible
+LLM API** — whether a remote provider (e.g. DeepSeek) or a local model server running
+on the device itself (e.g. a quantized Gemma) — executes tool calls (filesystem,
+shell, web, SSH), and maintains session history.
 
 | Property | Value |
 |----------|-------|
 | Language | Lua 5.1 |
-| Entry point | `/root/cluade/cluade.lua` |
-| Runtime target | OpenWRT / BusyBox ash / Linux MIPS |
+| Entry point | `cluade.lua` (e.g. `/root/cluade/` on OpenWRT, `~/cluade/` on a Pi) |
+| Runtime target | Constrained Linux — OpenWRT (BusyBox ash), Raspberry Pi, etc. |
+| Backends | Any OpenAI-compatible endpoint: remote (e.g. DeepSeek) or a local LLM server |
+| Dependencies | `curl` + Lua 5.1 + vendored `json.lua` — no Node.js, Python, or LuaSocket |
 | License | Not specified |
 
 ---
