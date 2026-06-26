@@ -52,8 +52,15 @@ shell, web, SSH), and maintains session history.
 
 ### 3.1 Bootstrap
 
-1. Determines `script_dir` from the source file path, falling back to `pwd`.
+1. Determines `script_dir` from the script's own path. The path is first resolved
+   with `readlink -f`, so cluade works when invoked through a **symlink** (e.g.
+   `/usr/local/bin/cluade -> /opt/cluade/cluade.lua`) — `script_dir` points at the
+   real file's directory, not the symlink's. Falls back to the as-invoked path,
+   then `pwd`, if `readlink` is unavailable.
 2. Prepends `script_dir` to `package.path` so all modules resolve locally.
+
+Note: the working directory for tool/file operations is the **process cwd** (where
+you ran the command, via `$PWD`) — independent of where cluade itself is installed.
 
 ### 3.2 CLI Interface
 
