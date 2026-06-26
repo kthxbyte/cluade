@@ -33,11 +33,41 @@ function Agent:init(config, cwd)
   return self
 end
 
+-- Terminal-mode seams (overridable in tests). The real versions shell out to
+-- stty against the controlling terminal so a permission prompt is always
+-- canonical + echoed, even when the interactive REPL has left the terminal in
+-- raw (-icanon -echo) mode. The prior mode is captured and restored exactly, so
+-- one-shot mode (already cooked) is unaffected and the terminal is never left
+-- in raw mode after a prompt.
+function Agent._tty_save()
+  local f = io.popen("stty -g 2>/dev/null </dev/tty")
+  if not f then return nil end
+  local saved = f:read("*l")
+  f:close()
+  if saved and #saved > 0 then return saved end
+  return nil
+end
+
+function Agent._tty_cooked()
+  os.execute("stty icanon echo 2>/dev/null </dev/tty")
+end
+
+function Agent._tty_restore(saved)
+  os.execute("stty " .. saved .. " 2>/dev/null </dev/tty")
+end
+
+function Agent._read_line()
+  return io.read("*l")
+end
+
 function Agent:prompt_yes_no(question)
+  local saved = Agent._tty_save()
+  if saved then Agent._tty_cooked() end
   io.write(question .. " [y/N] ")
   io.flush()
-  local answer = io.read("*l")
-  return answer and answer:lower():match("^y")
+  local answer = Agent._read_line()
+  if saved then Agent._tty_restore(saved) end
+  return (answer and answer:lower():match("^y")) and true or false
 end
 
 function Agent:_read_instructions()
