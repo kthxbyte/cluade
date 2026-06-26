@@ -197,7 +197,10 @@ function Agent:run(session, input)
           content = json.encode(result),
         }
 
-        local sig = name .. ":" .. (type(args_str) == "string" and args_str or json.encode(params))
+        -- Normalized signature: use the parsed params (key order canonicalized)
+        -- when available, else fall back to the raw arg string so a call whose
+        -- args failed to parse keeps its own identity.
+        local sig = LoopDetect.signature(name, next(params) and params or args_str)
         detector:record_call(sig)
         detector:record_result(result.status == "error")
 
