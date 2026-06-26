@@ -20,6 +20,10 @@ local DANGER_PREFIXES = {
 -- Block-device node prefixes -- writing to these destroys a disk/partition.
 local BLOCK_DEVS = { "sd", "mmcblk", "nvme", "hd", "vd" }
 
+-- Network downloaders and shell interpreters, for the "curl ... | sh" pattern.
+local DOWNLOADERS = { "curl", "wget" }
+local SHELLS = { "sh", "bash", "ash", "dash", "zsh", "ksh" }
+
 local function has_word(cmd, word)
   return cmd:match("%f[%w]" .. word .. "%f[%W]") ~= nil
 end
@@ -60,6 +64,23 @@ local function rm_targets_danger(cmd)
   return false
 end
 
+-- Is a network download piped straight into a shell interpreter
+-- (curl/wget ... | [sudo] sh|bash|...)?
+local function downloads_to_shell(cmd)
+  local has_dl = false
+  for _, d in ipairs(DOWNLOADERS) do
+    if has_word(cmd, d) then has_dl = true; break end
+  end
+  if not has_dl then return false end
+  for seg in cmd:gmatch("|([^|]*)") do
+    local s = seg:gsub("^%s+", ""):gsub("^sudo%s+", "")
+    for _, sh in ipairs(SHELLS) do
+      if s:match("^" .. sh .. "%f[%W]") then return true end
+    end
+  end
+  return false
+end
+
 function Danger.match(cmd)
   if type(cmd) ~= "string" then return nil end
 
@@ -94,6 +115,11 @@ function Danger.match(cmd)
   -- Recursive force-remove of a system/root/home path.
   if rm_recursive_force(cmd) and rm_targets_danger(cmd) then
     return "recursive force-remove of a sensitive path"
+  end
+
+  -- Network download piped into a shell (curl ... | sh).
+  if downloads_to_shell(cmd) then
+    return "download piped into a shell"
   end
 
   return nil
