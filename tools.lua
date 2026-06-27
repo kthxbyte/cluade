@@ -151,6 +151,7 @@ DEFS.glob = {
       type = "object",
       properties = {
         pattern = { type = "string", description = "Glob pattern (e.g. src/**/*.lua)" },
+        path    = { type = "string", description = "Directory to search in; a relative pattern resolves against it (default: cwd)" },
       },
       required = { "pattern" },
     },
@@ -371,7 +372,13 @@ end
 function Tools.execute_glob(cwd, params)
   local pattern = params.pattern
   local recursive = pattern:find("%*%*") ~= nil
-  if not pattern:match("^/") then pattern = cwd .. "/" .. pattern end
+  -- A relative pattern resolves against params.path (like grep), else cwd. An
+  -- absolute pattern is used as-is and params.path is ignored.
+  if not pattern:match("^/") then
+    local base = params.path or cwd
+    if not base:match("^/") then base = cwd .. "/" .. base end
+    pattern = base .. "/" .. pattern
+  end
   local cmd
   if recursive then
     -- Search from the directory portion BEFORE the first wildcard, matching the

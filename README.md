@@ -275,7 +275,7 @@ wrap it in `extra_body` (that key does nothing).
 | `write` | Create/overwrite file | `filePath`, `content` | — |
 | `edit` | Exact string replacement in file | `filePath`, `oldString`, `newString` | `replaceAll` (bool) |
 | `bash` | Execute shell command | `command` | `workdir` |
-| `glob` | Find files by glob pattern | `pattern` | — |
+| `glob` | Find files by glob pattern | `pattern` | `path` |
 | `grep` | Search files with regex | `pattern` | `path`, `include` |
 | `web_search` | DuckDuckGo HTML search | `query` | — |
 | `web_fetch` | Fetch URL content | `url` | — |
@@ -293,7 +293,7 @@ wrap it in `extra_body` (that key does nothing).
 
 **`bash`**: `cd <workdir> && <command>`, captures stdout+stderr, appends `[exit code: N]` on non-zero exit. 30-second timeout.
 
-**`glob`**: Detects `**` for recursive mode — searches from the directory before the first wildcard with `find -name <trailing glob>` (matching at any depth). Otherwise uses `ls -d`. Capped at 100 results.
+**`glob`**: A relative `pattern` resolves against `path` (default cwd); an absolute pattern is used as-is. Detects `**` for recursive mode — searches from the directory before the first wildcard with `find -name <trailing glob>` (matching at any depth). Otherwise uses `ls -d`. Capped at 100 results.
 
 **`grep`**: Runs `grep -rn` with optional `--include` filter, capped at 100 lines.
 
