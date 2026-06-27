@@ -89,6 +89,7 @@ target hardware has, which is exactly why cluade omits them.
 ├── tools.lua        # Tool definitions, permissions, executors, skill scanner
 ├── colors.lua       # ANSI color output helpers
 ├── lineedit.lua     # Raw-terminal line editor with history
+├── skillimport.lua  # Import Agent Skills from a git repo / path (tool-support report)
 ├── run_tests.sh     # Test runner (cd's to repo root, runs tests/test_*.lua)
 ├── tests/           # Test suite (test_*.lua); run from the repo root
 ├── vendor/
@@ -193,6 +194,26 @@ Hardcoded string defining the agent persona:
 ### 4.3 Skill Discovery
 
 At startup, `Agent:init()` scans `~/.cluade/skills/` and `./.cluade/skills/` for `SKILL.md` files and lists available skills in the system prompt. Loaded via the `skill()` tool.
+
+cluade reads the [Agent Skills](https://agentskills.io) open-standard `SKILL.md`
+format, so skills published for Claude Code / Codex / opencode are largely
+reusable. `skillimport.lua` pulls them in from a git repo or a local path:
+
+```sh
+lua5.1 skillimport.lua <git-url|local-path> [--dry-run] [--force] [--link] [--dest DIR]
+```
+
+It reports, per skill, whether cluade can run it — derived from the skill's
+`allowed-tools` frontmatter mapped onto cluade's tool set:
+
+- `[OK  ]` **full** — every declared tool has a cluade equivalent.
+- `[PART]` **partial** — some declared tools are unsupported (listed); the skill
+  still loads but may reach for a tool cluade lacks (e.g. `Task`, an MCP tool).
+- `[? ]` **unknown** — no `allowed-tools` declared, so support can't be verified.
+
+It also flags skills that bundle `python`/`node` scripts or a `.claude-plugin/`
+(agents/hooks/MCP), since those parts don't cross over to a constrained device.
+Use `--dry-run` to preview the report before installing.
 
 ### 4.4 Agent:run(session, input)
 
