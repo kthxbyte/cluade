@@ -295,12 +295,9 @@ function Agent:run(session, input)
             label = "using tool: " .. name
           end
           io.write(string.format(c.green("\n[%s...]") .. "\n", label))
-          local tokens
-          result, tokens = self.tools.execute(self.cwd, name, params)
-          if tokens > 100 then
-            io.write(result.output and result.output:sub(1, 500) or tostring(result.error))
-            io.write("\n")
-          end
+          result = self.tools.execute(self.cwd, name, params)
+          io.write(result.output or tostring(result.error))
+          io.write("\n")
         end
 
         messages[#messages + 1] = {
