@@ -93,6 +93,7 @@ Options:
   --list-sessions          List saved sessions
   -y, --yes                Auto-approve all permission prompts
   --init                   Initialize a config file
+  --show-tools-json        Debug: print the raw tool-call JSON the model emits
   -h, --help               Show this help
 
 Examples:
@@ -127,6 +128,8 @@ local function parse_args(argv)
       args.yes = true
     elseif a == "--init" then
       args.init = true
+    elseif a == "--show-tools-json" then
+      args.show_tools_json = true
     elseif a:sub(1, 1) ~= "-" then
       args.prompt = (args.prompt and args.prompt .. " " or "") .. a
     end
@@ -152,6 +155,7 @@ local config = Store.load_config(args.cwd)
 if args.model then config.model = args.model end
 if args.base_url then config.base_url = args.base_url end
 if args.api_key then config.api_key = args.api_key end
+if args.show_tools_json then config.show_tools_json = true end
 
 if args.init then
   local config_dir = os.getenv("HOME") .. "/.cluade"
