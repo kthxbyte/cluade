@@ -103,4 +103,23 @@ do
   ok(not out:find("reasoning:", 1, true), "no reasoning suffix when absent")
 end
 
+-- 11. _tool_label: the on-execution label shows tool name + parameters.
+do
+  ok(Agent._tool_label("bash", { command = "uname -a" }, '{"command": "uname -a"}')
+       == 'using tool: bash {"command": "uname -a"}', "bash label shows its args")
+  ok(Agent._tool_label("skill", { name = "brainstorming" }, '{"name":"brainstorming"}')
+       == "using skill: brainstorming", "skill label shows the skill name")
+  ok(Agent._tool_label("compact", { summary = "lots of text" }, '{"summary":"lots of text"}')
+       == "using tool: compact", "compact label omits its (long) summary")
+  -- table args (no raw string) fall back to encoding the params
+  local out = Agent._tool_label("read", { filePath = "a.lua" }, nil)
+  ok(out:match("^using tool: read ") ~= nil, "table-args label keeps the name prefix")
+  ok(out:match('"filePath"') ~= nil, "table-args label encodes the params")
+  -- long args are truncated with an ASCII ellipsis (terminal-safe)
+  local long = string.rep("x", 300)
+  local out2 = Agent._tool_label("bash", { command = long }, '{"command":"' .. long .. '"}')
+  ok(#out2 < 230, "long args are truncated")
+  ok(out2:sub(-3) == "...", "truncation marker is ASCII '...'")
+end
+
 if fail == 0 then print("\nALL PASS") else print("\n" .. fail .. " FAILED"); os.exit(1) end

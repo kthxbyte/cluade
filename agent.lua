@@ -23,6 +23,21 @@ function Agent._format_tool_json(tc)
   return name .. " " .. args
 end
 
+-- The green on-execution label: tool name + its parameters. skill shows its
+-- skill name; compact omits its (long) summary; everything else shows the raw
+-- argument JSON, truncated to keep the label to one tidy line.
+function Agent._tool_label(name, params, args_str)
+  if name == "skill" and type(params) == "table" and params.name then
+    return "using skill: " .. params.name
+  end
+  if name == "compact" then
+    return "using tool: compact"
+  end
+  local args = (type(args_str) == "string") and args_str or json.encode(params or {})
+  if #args > 200 then args = args:sub(1, 200) .. "..." end
+  return "using tool: " .. name .. " " .. args
+end
+
 -- Pretty-print a decoded value as indented JSON (pure Lua, no external tools).
 -- Scalars delegate to json.encode (consistent escaping); objects indent with
 -- sorted keys for deterministic output; arrays put one element per line. Used
@@ -290,15 +305,8 @@ function Agent:run(session, input)
         end
 
         if not result then
-          local label = name
-          if name == "skill" and params.name then
-            label = "using skill: " .. params.name
-          elseif name == "compact" then
-            label = "using tool: compact"
-          else
-            label = "using tool: " .. name
-          end
-          io.write(string.format(c.green("\n[%s...]") .. "\n", label))
+          local label = Agent._tool_label(name, params, args_str)
+          io.write(string.format(c.green("\n[%s]") .. "\n", label))
           result = self.tools.execute(self.cwd, name, params)
           io.write(result.output or tostring(result.error))
           io.write("\n")
