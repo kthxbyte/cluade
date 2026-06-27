@@ -23,6 +23,24 @@ function Agent._format_tool_json(tc)
   return name .. " " .. args
 end
 
+-- Build the --show-tools-json debug block for a response, in three layers:
+--   [raw response body]   the literal wire bytes (when captured by the provider)
+--   [tool_calls decoded]  the full decoded structure, re-encoded (envelope + all)
+--   [tool-call json] ...  one compact "<name> <args>" line per call
+function Agent._format_tools_debug(response)
+  local out = {}
+  if response.raw_body then
+    out[#out + 1] = "[raw response body]\n" .. response.raw_body
+  end
+  if response.tool_calls then
+    out[#out + 1] = "[tool_calls decoded] " .. json.encode(response.tool_calls)
+    for _, tc in ipairs(response.tool_calls) do
+      out[#out + 1] = "[tool-call json] " .. Agent._format_tool_json(tc)
+    end
+  end
+  return table.concat(out, "\n")
+end
+
 function Agent._effective_perm(base, name, params)
   if base == "allow" and name == "bash" and type(params) == "table" and params.command then
     local reason = dangercheck.match(params.command)
@@ -200,12 +218,12 @@ function Agent:run(session, input)
     end
 
     if response.tool_calls and #response.tool_calls > 0 then
+      if self.config.show_tools_json then
+        io.write(c.dim(Agent._format_tools_debug(response)) .. "\n")
+      end
       for _, tc in ipairs(response.tool_calls) do
         local fn = tc["function"]
         local name = fn.name
-        if self.config.show_tools_json then
-          io.write(c.dim("[tool-call json] " .. Agent._format_tool_json(tc)) .. "\n")
-        end
         local base_perm = self.tools.get_permission(name)
         local params = {}
         local args_str = fn.arguments

@@ -93,7 +93,7 @@ Options:
   --list-sessions          List saved sessions
   -y, --yes                Auto-approve all permission prompts
   --init                   Initialize a config file
-  --show-tools-json        Debug: print the raw tool-call JSON the model emits
+  --show-tools-json        Debug: print raw response body + decoded tool_calls + compact view
   -h, --help               Show this help
 
 Examples:
