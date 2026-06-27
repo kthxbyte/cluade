@@ -5,6 +5,7 @@
 
 package.path = "./?.lua;./?/init.lua;" .. package.path
 local Agent = require("agent")
+local json = require("vendor.json")
 
 local fail = 0
 local function ok(cond, msg)
@@ -57,7 +58,7 @@ do
   ok(out:match("%[raw response body%]"), "shows the raw response body section")
   ok(out:find(resp.raw_body, 1, true) ~= nil, "raw body bytes present verbatim")
   ok(out:match("%[tool_calls decoded%]"), "shows the decoded tool_calls structure")
-  ok(out:find('"id":"call_1"', 1, true) ~= nil, "decoded structure includes the envelope (id)")
+  ok(out:match('"id":%s*"call_1"') ~= nil, "decoded structure includes the envelope (id)")
   ok(out:match("%[tool%-call json%] glob"), "shows the per-call compact view")
 end
 
@@ -68,6 +69,19 @@ do
   local out = Agent._format_tools_debug(resp)
   ok(not out:match("%[raw response body%]"), "no raw section when raw_body absent")
   ok(out:match("%[tool%-call json%] read"), "still shows the compact view")
+end
+
+-- 8. _pretty_json: scalars delegate to json.encode; objects/arrays indent 2
+--    spaces per level; object keys sorted for deterministic output.
+do
+  ok(Agent._pretty_json(5) == json.encode(5), "scalar number delegates to json.encode")
+  ok(Agent._pretty_json("hi") == '"hi"', "scalar string")
+  ok(Agent._pretty_json({ b = "y", a = "x" }) == '{\n  "a": "x",\n  "b": "y"\n}',
+    "object: sorted keys, 2-space indent")
+  ok(Agent._pretty_json({ "x", "y" }) == '[\n  "x",\n  "y"\n]', "array: one element per line")
+  ok(Agent._pretty_json({ a = { b = "y" } }) == '{\n  "a": {\n    "b": "y"\n  }\n}',
+    "nested object indents progressively")
+  ok(Agent._pretty_json({}) == json.encode({}), "empty table delegates to json.encode")
 end
 
 if fail == 0 then print("\nALL PASS") else print("\n" .. fail .. " FAILED"); os.exit(1) end
