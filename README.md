@@ -203,17 +203,20 @@ reusable. `skillimport.lua` pulls them in from a git repo or a local path:
 lua5.1 skillimport.lua <git-url|local-path> [--dry-run] [--force] [--link] [--dest DIR]
 ```
 
-It reports, per skill, whether cluade can run it — derived from the skill's
-`allowed-tools` frontmatter mapped onto cluade's tool set:
+It reports, per skill, whether cluade can run it. In practice published skills
+almost never declare `allowed-tools` (0 of 18 in `anthropics/skills`), so the
+verdict folds two axes together — declared tools *and* bundled runtime deps:
 
-- `[OK  ]` **full** — every declared tool has a cluade equivalent.
-- `[PART]` **partial** — some declared tools are unsupported (listed); the skill
-  still loads but may reach for a tool cluade lacks (e.g. `Task`, an MCP tool).
-- `[? ]` **unknown** — no `allowed-tools` declared, so support can't be verified.
+- `[OK  ]` **full** — `allowed-tools` declared and every tool has a cluade equivalent.
+- `[OK* ]` **portable** — no tools declared, but no script/plugin deps either; a
+  pure-instruction skill that should run as-is.
+- `[PART]` **partial** — declares a tool cluade lacks (listed), e.g. `Task` or an MCP tool.
+- `[LTD ]` **limited** — bundles `python`/`node` scripts or a `.claude-plugin/`
+  (agents/hooks/MCP); a hard blocker on a constrained device, so it outweighs tool support.
 
-It also flags skills that bundle `python`/`node` scripts or a `.claude-plugin/`
-(agents/hooks/MCP), since those parts don't cross over to a constrained device.
-Use `--dry-run` to preview the report before installing.
+Use `--dry-run` to preview the report before installing. For example,
+`anthropics/skills` resolves to *9 portable, 9 limited* — the limited half being
+the document/media skills (`pdf`, `docx`, `xlsx`, …) that shell out to Python.
 
 ### 4.4 Agent:run(session, input)
 

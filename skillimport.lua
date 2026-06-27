@@ -81,6 +81,21 @@ function M.parse_skill(content)
   return fm
 end
 
+-- Final verdict for a skill, folding the tool axis (classify) together with the
+-- runtime-dependency axis. In practice `allowed-tools` is almost never declared,
+-- so a dependency-free skill is reported as "portable" rather than an
+-- unactionable "unknown"; bundled scripts / plugin.json are a hard blocker on a
+-- constrained device and outweigh tool support entirely.
+--   full     declared, every tool supported, no runtime deps
+--   partial  declared, some tools unsupported, no runtime deps
+--   portable undeclared tools, but no runtime deps (pure-instruction skill)
+--   limited  bundles python/node scripts or a plugin.json the device can't run
+function M.verdict(cls, has_scripts, has_plugin)
+  if has_scripts or has_plugin then return "limited" end
+  if cls.status == "unknown" then return "portable" end
+  return cls.status                                   -- "full" or "partial"
+end
+
 -- === filesystem / CLI (only exercised when run as a script) ===
 
 local function sh_quote(s) return "'" .. tostring(s):gsub("'", "'\\''") .. "'" end
@@ -125,13 +140,14 @@ function M.inspect(skill_dir)
   local content = read_file(skill_dir .. "/SKILL.md") or ""
   local fm = M.parse_skill(content)
   local cls = M.classify(fm["allowed-tools"])
+  local has_plugin = exists(skill_dir .. "/.claude-plugin/plugin.json")
+  local has_scripts = #popen_lines("find " .. sh_quote(skill_dir)
+    .. " \\( -name '*.py' -o -name '*.js' -o -name '*.ts' -o -name '*.mjs' \\) 2>/dev/null") > 0
   local warnings = {}
-  if exists(skill_dir .. "/.claude-plugin/plugin.json") then
+  if has_plugin then
     warnings[#warnings + 1] = "bundles agents/hooks/MCP (plugin.json) -- not consumed by cluade"
   end
-  local scripts = popen_lines("find " .. sh_quote(skill_dir)
-    .. " \\( -name '*.py' -o -name '*.js' -o -name '*.ts' -o -name '*.mjs' \\) 2>/dev/null")
-  if #scripts > 0 then
+  if has_scripts then
     warnings[#warnings + 1] = "bundles scripts (python/node) -- may not run on a constrained device"
   end
   return {
@@ -139,18 +155,19 @@ function M.inspect(skill_dir)
     description = fm.description,
     dir = skill_dir,
     cls = cls,
+    status = M.verdict(cls, has_scripts, has_plugin),
     warnings = warnings,
   }
 end
 
-local ICON = { full = "[OK  ]", partial = "[PART]", unknown = "[?   ]" }
+local ICON = { full = "[OK  ]", portable = "[OK* ]", partial = "[PART]", limited = "[LTD ]" }
 
 local function report(info)
-  io.write(ICON[info.cls.status] .. " " .. info.name)
-  if info.cls.status == "partial" then
+  io.write(ICON[info.status] .. " " .. info.name)
+  if info.status == "partial" then
     io.write("  unsupported: " .. table.concat(info.cls.unsupported, ", "))
-  elseif info.cls.status == "unknown" then
-    io.write("  (no allowed-tools declared)")
+  elseif info.status == "portable" then
+    io.write("  (pure instructions; no tool/runtime deps)")
   end
   io.write("\n")
   for _, w in ipairs(info.warnings) do io.write("        ! " .. w .. "\n") end
@@ -199,13 +216,12 @@ function M.main(argv)
   end
 
   io.write(string.format("found %d skill(s)%s:\n", #skills, dry_run and " (dry run)" or ""))
-  local n_full, n_part, n_unknown, n_imported, n_skipped = 0, 0, 0, 0, 0
+  local count = { full = 0, portable = 0, partial = 0, limited = 0 }
+  local n_imported, n_skipped = 0, 0
   for _, sd in ipairs(skills) do
     local info = M.inspect(sd)
     report(info)
-    if info.cls.status == "full" then n_full = n_full + 1
-    elseif info.cls.status == "partial" then n_part = n_part + 1
-    else n_unknown = n_unknown + 1 end
+    count[info.status] = count[info.status] + 1
 
     if not dry_run then
       local target = dest .. "/" .. info.name
@@ -227,11 +243,12 @@ function M.main(argv)
     end
   end
 
-  io.write(string.format("\nsummary: %d full, %d partial, %d unknown", n_full, n_part, n_unknown))
+  io.write(string.format("\nsummary: %d full, %d portable, %d partial, %d limited",
+    count.full, count.portable, count.partial, count.limited))
   if not dry_run then io.write(string.format("  |  %d imported, %d skipped", n_imported, n_skipped)) end
   io.write("\n")
-  if n_part > 0 or n_unknown > 0 then
-    io.write("note: partial/unknown skills still load, but may reference tools cluade lacks.\n")
+  if count.partial > 0 or count.limited > 0 then
+    io.write("note: partial = reaches for unsupported tools; limited = bundles a python/node/plugin runtime the device may lack.\n")
   end
   if tmp then os.execute("rm -rf " .. sh_quote(tmp)) end
   return 0
