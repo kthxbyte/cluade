@@ -23,9 +23,34 @@ function Agent._format_tool_json(tc)
   return name .. " " .. args
 end
 
+-- Pretty-print a decoded value as indented JSON (pure Lua, no external tools).
+-- Scalars delegate to json.encode (consistent escaping); objects indent with
+-- sorted keys for deterministic output; arrays put one element per line. Used
+-- only for the decoded debug layer -- the raw-body layer stays literal.
+function Agent._pretty_json(v, indent)
+  if type(v) ~= "table" then return json.encode(v) end
+  if next(v) == nil then return json.encode(v) end   -- empty {} or []
+  indent = indent or ""
+  local child = indent .. "  "
+  local n = 0
+  for _ in pairs(v) do n = n + 1 end
+  local parts = {}
+  if n == #v then
+    for i = 1, n do parts[i] = child .. Agent._pretty_json(v[i], child) end
+    return "[\n" .. table.concat(parts, ",\n") .. "\n" .. indent .. "]"
+  end
+  local keys = {}
+  for k in pairs(v) do keys[#keys + 1] = k end
+  table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+  for _, k in ipairs(keys) do
+    parts[#parts + 1] = child .. json.encode(tostring(k)) .. ": " .. Agent._pretty_json(v[k], child)
+  end
+  return "{\n" .. table.concat(parts, ",\n") .. "\n" .. indent .. "}"
+end
+
 -- Build the --show-tools-json debug block for a response, in three layers:
 --   [raw response body]   the literal wire bytes (when captured by the provider)
---   [tool_calls decoded]  the full decoded structure, re-encoded (envelope + all)
+--   [tool_calls decoded]  the full decoded structure, pretty-printed (envelope + all)
 --   [tool-call json] ...  one compact "<name> <args>" line per call
 function Agent._format_tools_debug(response)
   local out = {}
@@ -33,7 +58,7 @@ function Agent._format_tools_debug(response)
     out[#out + 1] = "[raw response body]\n" .. response.raw_body
   end
   if response.tool_calls then
-    out[#out + 1] = "[tool_calls decoded] " .. json.encode(response.tool_calls)
+    out[#out + 1] = "[tool_calls decoded]\n" .. Agent._pretty_json(response.tool_calls)
     for _, tc in ipairs(response.tool_calls) do
       out[#out + 1] = "[tool-call json] " .. Agent._format_tool_json(tc)
     end
@@ -219,7 +244,7 @@ function Agent:run(session, input)
 
     if response.tool_calls and #response.tool_calls > 0 then
       if self.config.show_tools_json then
-        io.write(c.dim(Agent._format_tools_debug(response)) .. "\n")
+        io.write(c.step(Agent._format_tools_debug(response)) .. "\n")
       end
       for _, tc in ipairs(response.tool_calls) do
         local fn = tc["function"]
