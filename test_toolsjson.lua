@@ -44,4 +44,30 @@ do
   ok(type(Agent._format_tool_json(nil)) == "string", "nil tc is safe")
 end
 
+-- 6. _format_tools_debug: all three layers (raw body, decoded array, compact).
+do
+  local resp = {
+    raw_body = '{"choices":[{"message":{"tool_calls":[{"id":"call_1"}]}}]}',
+    tool_calls = {
+      { id = "call_1", type = "function",
+        ["function"] = { name = "glob", arguments = '{"pattern":"*.lua"}' } },
+    },
+  }
+  local out = Agent._format_tools_debug(resp)
+  ok(out:match("%[raw response body%]"), "shows the raw response body section")
+  ok(out:find(resp.raw_body, 1, true) ~= nil, "raw body bytes present verbatim")
+  ok(out:match("%[tool_calls decoded%]"), "shows the decoded tool_calls structure")
+  ok(out:find('"id":"call_1"', 1, true) ~= nil, "decoded structure includes the envelope (id)")
+  ok(out:match("%[tool%-call json%] glob"), "shows the per-call compact view")
+end
+
+-- 7. No raw_body: omit the raw section, still show decoded + compact.
+do
+  local resp = { tool_calls = {
+    { ["function"] = { name = "read", arguments = '{"filePath":"a.lua"}' } } } }
+  local out = Agent._format_tools_debug(resp)
+  ok(not out:match("%[raw response body%]"), "no raw section when raw_body absent")
+  ok(out:match("%[tool%-call json%] read"), "still shows the compact view")
+end
+
 if fail == 0 then print("\nALL PASS") else print("\n" .. fail .. " FAILED"); os.exit(1) end

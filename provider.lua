@@ -117,6 +117,8 @@ function HttpProvider:chat(messages, tools, options)
     tool_calls = choice.message.tool_calls,
     finish_reason = choice.finish_reason,
     usage = parsed.usage,
+    -- Literal wire bytes, surfaced only for the --show-tools-json debug view.
+    raw_body = self._config.show_tools_json and raw or nil,
   }
 end
 
