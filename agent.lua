@@ -347,6 +347,11 @@ function Agent:run(session, input)
         if name == "compact" and result.status == "compacted" then
           local compact_msg = SYSTEM_PROMPT .. "\n\n[Session compressed. Summary of prior work:\n"
             .. result.summary .. "\nCurrent state preserved: open files, decisions, next steps.]"
+          -- Re-add the per-turn augmentations so the steps remaining in this run
+          -- still see the ./CLAUDE.md instructions and skills list. Using the
+          -- marker keeps the next turn's rebuild idempotent (no duplication).
+          local aug = self:_augmentations()
+          if #aug > 0 then compact_msg = compact_msg .. AUGMENT_MARK .. aug end
           local new_messages = {
             { role = "system", content = compact_msg },
           }
