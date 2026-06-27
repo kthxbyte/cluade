@@ -25,6 +25,55 @@ shell, web, SSH), and maintains session history.
 | Dependencies | `curl` + Lua 5.1 + vendored `json.lua` — no Node.js, Python, or LuaSocket |
 | License | Not specified |
 
+### 1.1 cluade vs. the Bigger Tools
+
+cluade is a **lighter alternative** to full agents like [opencode](https://opencode.ai)
+and [Claude Code](https://claude.com/claude-code) — not a replacement on a dev laptop,
+but a real coding agent for hardware where neither of those can even start. The
+trade-off is deliberate: cluade keeps the parts that fit a router or a Pi and drops the
+machinery that needs a heavier runtime.
+
+✅ full · ⚠️ partial/indirect · ❌ none
+
+| | **cluade** | **opencode** | **Claude Code** |
+|---|---|---|---|
+| Runtime | ~2.3k LOC Lua 5.1 | Go/TS binary | Node.js app |
+| Hard dependencies | `lua5.1` + `curl` | prebuilt binary | Node 18+ |
+| Runs on OpenWRT/MIPS/Pi | ✅ | ❌ | ❌ |
+| Bring-your-own provider | ✅ any OpenAI-compatible | ✅ 75+ | ⚠️ Anthropic/Bedrock/Vertex |
+| Local models (Ollama/llama.cpp) | ✅ | ✅ | ❌ |
+| Interface | line REPL + one-shot | full TUI + IDE/desktop | terminal + IDE/desktop/web |
+| read/write/edit/bash/glob/grep | ✅ | ✅ | ✅ |
+| Web search + fetch | ✅ | ✅ | ✅ |
+| Remote shell over SSH | ✅ `remote_bash` | ❌ built-in | ❌ built-in |
+| Project instructions (`AGENTS.md`…) | ✅ tree-walk + global | ✅ tree-walk + global | ✅ `CLAUDE.md` hierarchy |
+| Compaction | ✅ | ✅ | ✅ |
+| Skills (on-demand markdown) | ✅ | ✅ | ✅ |
+| Per-tool allow/ask/deny + danger gate | ✅ | ⚠️ | ✅ |
+| Explicit loop detection | ✅ warn-then-stop | ⚠️ internal | ⚠️ internal |
+| Save/resume/list sessions | ✅ | ✅ | ✅ |
+| Auto-memory (self-written notes) | ❌ | ❌ | ✅ |
+| Subagents / parallelism | ❌ | ✅ | ✅ |
+| MCP servers | ❌ | ✅ | ✅ |
+| Hooks / plugins | ❌ | ✅ | ✅ |
+| LSP diagnostics | ❌ | ✅ | ⚠️ via IDE |
+| Plan mode | ❌ | ✅ | ✅ |
+| Custom slash commands | ❌ (built-ins only) | ✅ | ✅ |
+| Image / multimodal input | ❌ text-only | ⚠️ | ✅ |
+
+**Where cluade wins:** it runs where the others structurally can't — busybox, MIPS, a
+Pi with no Node and little disk. It is genuinely model-agnostic (a remote provider *or*
+a local model on the LAN), and it ships one thing the big tools don't: **`remote_bash`**,
+so a cluade on one box can drive another over SSH.
+
+**What you give up:** the heavyweight agent machinery — MCP, subagents, hooks, LSP,
+IDE/desktop/web surfaces, auto-memory, multimodal. Those need a richer runtime than the
+target hardware has, which is exactly why cluade omits them.
+
+> **In one line:** not a replacement for Claude Code or opencode on a dev laptop — but on
+> hardware where neither can even start, cluade gives you a real, safe, session-aware
+> coding agent with files, shell, search, web, skills, and project instructions.
+
 ---
 
 ## 2. File Structure
