@@ -122,8 +122,14 @@ end
 local function basename(p) return (p:gsub("/+$", ""):match("([^/]+)$")) or p end
 local function dirname(p) return (p:match("^(.*)/[^/]+/?$")) or "." end
 
-local function is_git_url(s)
-  return s:match("://") ~= nil or s:match("^git@") ~= nil or s:match("%.git$") ~= nil
+-- Resolve a source argument to (location, is_remote). Accepts a full git URL, an
+-- "owner/repo" GitHub shorthand, or a local path (a relative path must start with
+-- ./ so it isn't mistaken for owner/repo). Shared with marketplace.lua.
+function M.resolve_source(src)
+  if src:match("^%./") or src:match("^/") or src:match("^~") then return src, false end
+  if src:match("://") or src:match("^git@") then return src, true end
+  if src:match("^[%w._-]+/[%w._-]+$") then return "https://github.com/" .. src, true end
+  return src, false
 end
 
 function M.find_skill_dirs(root)
@@ -193,18 +199,19 @@ function M.main(argv)
   dest = dest or (home .. "/.cluade/skills")
 
   -- Resolve the source to a local root, cloning a git URL into a temp dir.
+  local resolved, is_remote = M.resolve_source(source)
   local root, tmp
-  if is_git_url(source) then
+  if is_remote then
     tmp = popen_lines("mktemp -d 2>/dev/null")[1]
     if not tmp then io.write("error: mktemp failed\n"); return 1 end
-    io.write("cloning " .. source .. " ...\n")
-    if os.execute("git clone --depth 1 " .. sh_quote(source) .. " " .. sh_quote(tmp) .. " 2>/dev/null") ~= 0 then
+    io.write("cloning " .. resolved .. " ...\n")
+    if os.execute("git clone --depth 1 " .. sh_quote(resolved) .. " " .. sh_quote(tmp) .. " 2>/dev/null") ~= 0 then
       io.write("error: git clone failed\n"); os.execute("rm -rf " .. sh_quote(tmp)); return 1
     end
     root = tmp
     if link then io.write("note: --link ignored for a git source (cloned to a temp dir)\n"); link = false end
   else
-    root = source
+    root = resolved
     if not exists(root) then io.write("error: path not found: " .. root .. "\n"); return 1 end
   end
 

@@ -102,4 +102,18 @@ do
   ok(V(SI.classify("Read Grep"), true, false) == "limited", "bundled scripts outweigh full tool support")
 end
 
+-- 10. Source resolution: full URLs, owner/repo shorthand, and local paths.
+do
+  local r, remote = SI.resolve_source("obra/superpowers")
+  ok(r == "https://github.com/obra/superpowers" and remote == true, "owner/repo -> github URL (remote)")
+  r, remote = SI.resolve_source("https://github.com/anthropics/skills")
+  ok(remote == true and r == "https://github.com/anthropics/skills", "full https URL stays, remote")
+  r, remote = SI.resolve_source("git@github.com:obra/superpowers.git")
+  ok(remote == true, "scp-style git URL is remote")
+  r, remote = SI.resolve_source("./local/skills")
+  ok(remote == false and r == "./local/skills", "./ path is local")
+  r, remote = SI.resolve_source("/abs/path")
+  ok(remote == false, "absolute path is local")
+end
+
 if fail == 0 then print("\nALL PASS") else print("\n" .. fail .. " FAILED"); os.exit(1) end

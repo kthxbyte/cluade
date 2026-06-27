@@ -82,14 +82,6 @@ local function read_file(path)
   local c = f:read("*a"); f:close(); return c
 end
 
--- Accept a full git URL, an "owner/repo" shorthand, or a local path.
-local function resolve_source(src)
-  if src:match("^%./") or src:match("^/") or src:match("^~") then return src, false end
-  if src:match("://") or src:match("^git@") then return src, true end
-  if src:match("^[%w._-]+/[%w._-]+$") then return "https://github.com/" .. src, true end
-  return src, false
-end
-
 local ICON = {
   compatible = "[OK  ]", partial = "[PART]", limited = "[LTD ]", incompatible = "[ X  ]",
 }
@@ -109,7 +101,7 @@ function M.main(argv)
     io.write("usage: lua5.1 marketplace.lua <git-url | owner/repo | local-path>\n")
     return 1
   end
-  local resolved, is_remote = resolve_source(src)
+  local resolved, is_remote = skillimport.resolve_source(src)
 
   local root, tmp
   if is_remote then
