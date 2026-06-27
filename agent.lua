@@ -241,7 +241,7 @@ function Agent:run(session, input)
     else
       io.write("\n" .. c.dim("[took " .. elapsed .. "s]") .. "\n")
     end
-    if response.content then
+    if response.content and #response.content > 0 then
       io.write("\n" .. response.content .. "\n")
       io.flush()
     end
