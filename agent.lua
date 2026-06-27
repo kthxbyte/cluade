@@ -10,6 +10,19 @@ local Agent = {}
 -- command to a prompt. Only applies to an allowed bash call; never downgrades
 -- deny, never touches a tool already set to ask, never gates non-bash tools.
 -- Returns: effective_permission, flag_reason (reason is nil unless escalated).
+-- Render a tool call for --show-tools-json: "<name> <raw arguments>". The
+-- arguments string is shown verbatim (it's the JSON the model emitted), so a
+-- malformed or oddly-shaped payload is visible before cluade parses it.
+function Agent._format_tool_json(tc)
+  local fn = (type(tc) == "table" and tc["function"]) or {}
+  local name = fn.name or "?"
+  local args = fn.arguments
+  if type(args) ~= "string" then
+    args = (args == nil) and "{}" or json.encode(args)
+  end
+  return name .. " " .. args
+end
+
 function Agent._effective_perm(base, name, params)
   if base == "allow" and name == "bash" and type(params) == "table" and params.command then
     local reason = dangercheck.match(params.command)
@@ -190,6 +203,9 @@ function Agent:run(session, input)
       for _, tc in ipairs(response.tool_calls) do
         local fn = tc["function"]
         local name = fn.name
+        if self.config.show_tools_json then
+          io.write(c.dim("[tool-call json] " .. Agent._format_tool_json(tc)) .. "\n")
+        end
         local base_perm = self.tools.get_permission(name)
         local params = {}
         local args_str = fn.arguments

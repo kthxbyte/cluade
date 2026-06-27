@@ -76,6 +76,7 @@ Options:
   --list-sessions          List saved sessions
   -y, --yes                Auto-approve all permission prompts
   --init                   Write a default config to ~/.cluade/config.json
+  --show-tools-json        Debug: print the raw tool-call JSON the model emits
   -h, --help               Show help
 ```
 
