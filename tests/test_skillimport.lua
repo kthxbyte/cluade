@@ -87,4 +87,19 @@ do
   ok(SI.classify(fm["allowed-tools"]).status == "full", "inline allowed-tools value parsed")
 end
 
+-- 9. Dependency-based fallback verdict. Since real skills almost never declare
+--    allowed-tools, the final verdict folds in the runtime-dependency axis:
+--    bundled scripts / plugin.json (a hard blocker on a constrained device)
+--    outweigh tool support, and an undeclared-but-dependency-free skill is
+--    "portable" rather than an unactionable "unknown".
+do
+  local V = SI.verdict
+  ok(V(SI.classify("Read Grep"), false, false) == "full", "declared + all supported + no deps -> full")
+  ok(V(SI.classify("Read Task"), false, false) == "partial", "declared + unsupported tool -> partial")
+  ok(V(SI.classify(nil), false, false) == "portable", "undeclared + no deps -> portable (was unknown)")
+  ok(V(SI.classify(nil), true, false) == "limited", "bundled scripts -> limited")
+  ok(V(SI.classify(nil), false, true) == "limited", "bundled plugin.json -> limited")
+  ok(V(SI.classify("Read Grep"), true, false) == "limited", "bundled scripts outweigh full tool support")
+end
+
 if fail == 0 then print("\nALL PASS") else print("\n" .. fail .. " FAILED"); os.exit(1) end
