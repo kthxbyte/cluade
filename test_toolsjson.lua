@@ -84,4 +84,23 @@ do
   ok(Agent._pretty_json({}) == json.encode({}), "empty table delegates to json.encode")
 end
 
+-- 9. reasoning_content is surfaced on the decoded header when present.
+do
+  local resp = {
+    reasoning_content = "Checking the OS via uname.",
+    tool_calls = { { ["function"] = { name = "bash", arguments = '{"command":"uname -a"}' } } },
+  }
+  local out = Agent._format_tools_debug(resp)
+  ok(out:find('[tool_calls decoded - reasoning: "Checking the OS via uname."]', 1, true) ~= nil,
+    "decoded header carries the reasoning text in the requested format")
+end
+
+-- 10. No reasoning_content: plain decoded header, no 'reasoning:' suffix.
+do
+  local resp = { tool_calls = { { ["function"] = { name = "read", arguments = "{}" } } } }
+  local out = Agent._format_tools_debug(resp)
+  ok(out:match("%[tool_calls decoded%]") ~= nil, "plain header when no reasoning")
+  ok(not out:find("reasoning:", 1, true), "no reasoning suffix when absent")
+end
+
 if fail == 0 then print("\nALL PASS") else print("\n" .. fail .. " FAILED"); os.exit(1) end

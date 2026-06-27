@@ -58,7 +58,11 @@ function Agent._format_tools_debug(response)
     out[#out + 1] = "[raw response body]\n" .. response.raw_body
   end
   if response.tool_calls then
-    out[#out + 1] = "[tool_calls decoded]\n" .. Agent._pretty_json(response.tool_calls)
+    local header = "[tool_calls decoded]"
+    if response.reasoning_content and #response.reasoning_content > 0 then
+      header = '[tool_calls decoded - reasoning: "' .. response.reasoning_content .. '"]'
+    end
+    out[#out + 1] = header .. "\n" .. Agent._pretty_json(response.tool_calls)
     for _, tc in ipairs(response.tool_calls) do
       out[#out + 1] = "[tool-call json] " .. Agent._format_tool_json(tc)
     end
