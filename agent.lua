@@ -181,23 +181,79 @@ function Agent:_augmentations()
   return table.concat(parts, "\n\n")
 end
 
-function Agent:_read_instructions()
-  -- Precedence follows opencode: AGENTS.md (the cross-tool standard) first,
-  -- CLAUDE.md as the Claude-Code-compatible fallback, GEMINI.md last. First
-  -- match wins; the rest are ignored (they're usually symlinks to the same file).
-  local files = { "AGENTS.md", "CLAUDE.md", "GEMINI.md" }
-  for _, name in ipairs(files) do
-    local path = self.cwd .. "/" .. name
-    local f = io.open(path, "r")
+-- Per-file precedence follows opencode: AGENTS.md (the cross-tool standard)
+-- first, CLAUDE.md as the Claude-Code-compatible fallback, GEMINI.md last.
+-- Returns name, content for the first non-empty file present in `dir`, else nil.
+function Agent._first_instr_in(dir)
+  for _, name in ipairs({ "AGENTS.md", "CLAUDE.md", "GEMINI.md" }) do
+    local f = io.open(dir .. "/" .. name, "r")
     if f then
       local content = f:read("*a")
       f:close()
-      if #content > 0 then
-        return "User instructions (from ./" .. name .. "):\n" .. content
-      end
+      if content and #content > 0 then return name, content end
     end
   end
   return nil
+end
+
+-- True if `dir` is a git root (a .git directory, or a .git file for worktrees).
+function Agent._has_git(dir)
+  local f = io.open(dir .. "/.git/HEAD", "r")        -- normal repo (.git is a dir)
+  if f then f:close(); return true end
+  f = io.open(dir .. "/.git", "r")                   -- worktree (.git is a file)
+  if f then f:close(); return true end
+  return false
+end
+
+-- Resolve a path to absolute so the parent-walk is well defined. cluade usually
+-- gets cwd from $PWD (already absolute); this only shells out for a relative one.
+function Agent._abspath(p)
+  if p:sub(1, 1) == "/" then return p end
+  local f = io.popen("cd '" .. p:gsub("'", "'\\''") .. "' 2>/dev/null && pwd -P")
+  local r = f and f:read("*l")
+  if f then f:close() end
+  return (r and #r > 0) and r or p
+end
+
+-- The global instruction directory (~/.cluade), a base layer applied across all
+-- projects. A seam so tests can point it elsewhere.
+function Agent:_user_dir()
+  local home = os.getenv("HOME") or os.getenv("USERPROFILE")
+  return home and (home .. "/.cluade") or nil
+end
+
+-- Project instructions, opencode-style: a global ~/.cluade file (if any) as a
+-- base, then the nearest instruction file found walking up from cwd to the git
+-- root (or filesystem root). Global is concatenated ahead of local so a project
+-- file overrides personal defaults. Returns the combined block, or nil.
+function Agent:_read_instructions()
+  local parts = {}
+
+  local gdir = self:_user_dir()
+  if gdir then
+    local gname, gcontent = Agent._first_instr_in(gdir)
+    if gname then
+      parts[#parts + 1] = "Global user instructions (from " .. gdir .. "/" .. gname .. "):\n" .. gcontent
+    end
+  end
+
+  local cwd = Agent._abspath(self.cwd)
+  local dir = cwd
+  while dir do
+    local name, content = Agent._first_instr_in(dir)
+    if name then
+      local where = (dir == cwd) and ("./" .. name) or (dir .. "/" .. name)
+      parts[#parts + 1] = "User instructions (from " .. where .. "):\n" .. content
+      break                                          -- nearest match wins
+    end
+    if Agent._has_git(dir) then break end            -- don't ascend past the repo root
+    local parent = dir:match("^(.*)/[^/]+$")
+    if not parent or parent == dir then break end
+    dir = (parent == "") and "/" or parent
+  end
+
+  if #parts == 0 then return nil end
+  return table.concat(parts, "\n\n")
 end
 
 function Agent:run(session, input)
