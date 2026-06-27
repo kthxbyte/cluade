@@ -40,11 +40,16 @@ shell, web, SSH), and maintains session history.
 ├── tools.lua        # Tool definitions, permissions, executors, skill scanner
 ├── colors.lua       # ANSI color output helpers
 ├── lineedit.lua     # Raw-terminal line editor with history
+├── run_tests.sh     # Test runner (cd's to repo root, runs tests/test_*.lua)
+├── tests/           # Test suite (test_*.lua); run from the repo root
 ├── vendor/
 │   ├── json.lua          # Third-party JSON encode/decode (lua-users wiki)
 │   └── LICENSE-json.txt  # MIT license for json.lua
 └── .cluade/skills/  # Installed skill files (SKILL.md format)
 ```
+
+Run the tests with `./run_tests.sh` (or `lua5.1 tests/test_<name>.lua` from the
+repo root — the tests resolve modules via cwd-relative paths).
 
 ---
 
