@@ -158,6 +158,29 @@ function Agent:prompt_yes_no(question)
   return (answer and answer:lower():match("^y")) and true or false
 end
 
+-- Separates the persistent base of the system message (SYSTEM_PROMPT, or a
+-- compaction summary) from the per-turn augmentations rebuilt below. Anything
+-- from this marker onward is regenerated each run, so it never accumulates.
+local AUGMENT_MARK = "\n\n-- cluade session context (rebuilt each turn) --\n\n"
+
+-- The per-turn additions to the system message: the available-skills list and
+-- the ./CLAUDE.md instructions. Recomputed fresh every run so they appear
+-- exactly once regardless of how many turns or resumes a session has had.
+function Agent:_augmentations()
+  local parts = {}
+  local skills = self.tools._scan_skills and self.tools._scan_skills() or {}
+  if #skills > 0 then
+    local lines = {}
+    for _, s in ipairs(skills) do
+      lines[#lines + 1] = "- " .. s.name .. ": " .. (s.description:sub(1, 80))
+    end
+    parts[#parts + 1] = "Available skills (use skill() to load):\n" .. table.concat(lines, "\n")
+  end
+  local instructions = self:_read_instructions()
+  if instructions then parts[#parts + 1] = instructions end
+  return table.concat(parts, "\n\n")
+end
+
 function Agent:_read_instructions()
   local files = { "CLAUDE.md", "AGENTS.md", "GEMINI.md" }
   for _, name in ipairs(files) do
@@ -188,19 +211,15 @@ function Agent:run(session, input)
     messages[1] = { role = "system", content = SYSTEM_PROMPT }
   end
 
-  local skills = self.tools._scan_skills and self.tools._scan_skills() or {}
-  if #skills > 0 then
-    local lines = {}
-    for _, s in ipairs(skills) do
-      lines[#lines + 1] = "- " .. s.name .. ": " .. (s.description:sub(1, 80))
-    end
-    messages[1].content = messages[1].content .. "\n\nAvailable skills (use skill() to load):\n" .. table.concat(lines, "\n")
-  end
-
-  local instructions = self:_read_instructions()
-  if instructions then
-    messages[1].content = messages[1].content .. "\n\n" .. instructions
-  end
+  -- Rebuild the system message fresh: keep its persistent base (everything
+  -- before the marker, i.e. SYSTEM_PROMPT or a compaction summary) and re-add
+  -- the per-turn augmentations. Appending unconditionally would duplicate the
+  -- skills list and ./CLAUDE.md instructions on every turn of a resumed session.
+  local content = messages[1].content
+  local mark = content:find(AUGMENT_MARK, 1, true)
+  local base = mark and content:sub(1, mark - 1) or content
+  local aug = self:_augmentations()
+  messages[1].content = (#aug > 0) and (base .. AUGMENT_MARK .. aug) or base
 
   if input then
     messages[#messages + 1] = { role = "user", content = input }
