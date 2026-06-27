@@ -40,6 +40,24 @@ do
   ok(count(r.output) == 3, "relative recursive resolves against cwd -> 3")
 end
 
+-- params.path: a relative pattern resolves against it (like grep), NOT cwd.
+-- Run from an empty cwd so a dropped path would yield zero matches.
+local emptycwd = os.tmpname(); os.remove(emptycwd); os.execute('mkdir -p "' .. emptycwd .. '"')
+do
+  local r = T.execute_glob(emptycwd, { pattern = "**/*.lua", path = base })
+  ok(count(r.output) == 3, "recursive pattern honors params.path -> 3")
+end
+do
+  local r = T.execute_glob(emptycwd, { pattern = "*.lua", path = base })
+  ok(count(r.output) == 2, "non-recursive pattern honors params.path -> 2 top-level")
+end
+-- An absolute pattern wins; params.path is ignored.
+do
+  local r = T.execute_glob(emptycwd, { pattern = base .. "/**/*.lua", path = "/does/not/exist" })
+  ok(count(r.output) == 3, "absolute pattern ignores params.path -> 3")
+end
+os.execute('rm -rf "' .. emptycwd .. '"')
+
 os.execute('rm -rf "' .. base .. '"')
 
 if fail == 0 then print("\nALL PASS") else print("\n" .. fail .. " FAILED"); os.exit(1) end
