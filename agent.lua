@@ -182,7 +182,10 @@ function Agent:_augmentations()
 end
 
 function Agent:_read_instructions()
-  local files = { "CLAUDE.md", "AGENTS.md", "GEMINI.md" }
+  -- Precedence follows opencode: AGENTS.md (the cross-tool standard) first,
+  -- CLAUDE.md as the Claude-Code-compatible fallback, GEMINI.md last. First
+  -- match wins; the rest are ignored (they're usually symlinks to the same file).
+  local files = { "AGENTS.md", "CLAUDE.md", "GEMINI.md" }
   for _, name in ipairs(files) do
     local path = self.cwd .. "/" .. name
     local f = io.open(path, "r")

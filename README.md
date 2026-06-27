@@ -183,8 +183,15 @@ the model changes behavior after the warning, the trip disarms.
 
 ### 4.6 Project Instructions
 
-Before the first step, `Agent:run` reads the first of `CLAUDE.md`, `AGENTS.md`,
-`GEMINI.md` found in `cwd` and appends its contents to the system prompt.
+Before the first step, `Agent:run` reads the first of `AGENTS.md`, `CLAUDE.md`,
+`GEMINI.md` found in `cwd` and appends its contents to the system prompt. The
+order follows opencode: `AGENTS.md` (the cross-tool standard) is preferred, with
+`CLAUDE.md` as the Claude-Code-compatible fallback and `GEMINI.md` last. First
+match wins; the others are ignored.
+
+The augmentations (this file plus the available-skills list) are rebuilt fresh
+on every turn -- and re-applied after a `compact` -- so they appear exactly once
+no matter how long the session runs, and survive compaction within a run.
 
 ### 4.7 Permission Model
 
