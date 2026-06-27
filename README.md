@@ -89,6 +89,7 @@ target hardware has, which is exactly why cluade omits them.
 ├── tools.lua        # Tool definitions, permissions, executors, skill scanner
 ├── colors.lua       # ANSI color output helpers
 ├── lineedit.lua     # Raw-terminal line editor with history
+├── marketplace.lua  # Browse a plugin marketplace, flag per-plugin compatibility
 ├── skillimport.lua  # Import Agent Skills from a git repo / path (tool-support report)
 ├── run_tests.sh     # Test runner (cd's to repo root, runs tests/test_*.lua)
 ├── tests/           # Test suite (test_*.lua); run from the repo root
@@ -217,6 +218,27 @@ verdict folds two axes together — declared tools *and* bundled runtime deps:
 Use `--dry-run` to preview the report before installing. For example,
 `anthropics/skills` resolves to *9 portable, 9 limited* — the limited half being
 the document/media skills (`pdf`, `docx`, `xlsx`, …) that shell out to Python.
+
+#### Browsing a marketplace
+
+A Claude Code **plugin marketplace** is a git repo with a
+`.claude-plugin/marketplace.json` cataloguing plugins, each declaring its
+component types (`skills`, `commands`, `agents`, `hooks`, `mcpServers`,
+`lspServers`). `marketplace.lua` lists every plugin and flags how much of it
+cluade can use — consuming skills (and reading commands/agents as text), but not
+running hooks/MCP/LSP:
+
+```sh
+lua5.1 marketplace.lua <git-url | owner/repo | local-path>   # e.g. anthropics/skills
+```
+
+Per plugin: `[OK  ]` **compatible** (usable skills/commands, no blockers) ·
+`[PART]` **partial** (some usable, some runtime-bound or blocked) · `[LTD ]`
+**limited** (only python/node-bound skills) · `[ X  ]` **incompatible** (only
+hooks/MCP/LSP — nothing cluade can consume). Skills are inspected with the same
+`skillimport` check, so e.g. browsing `anthropics/skills` flags `document-skills`
+as **limited** (all four skills shell out to Python) while `claude-api` is
+**compatible**.
 
 ### 4.4 Agent:run(session, input)
 
