@@ -183,11 +183,19 @@ the model changes behavior after the warning, the trip disarms.
 
 ### 4.6 Project Instructions
 
-Before the first step, `Agent:run` reads the first of `AGENTS.md`, `CLAUDE.md`,
-`GEMINI.md` found in `cwd` and appends its contents to the system prompt. The
-order follows opencode: `AGENTS.md` (the cross-tool standard) is preferred, with
-`CLAUDE.md` as the Claude-Code-compatible fallback and `GEMINI.md` last. First
-match wins; the others are ignored.
+Before the first step, `Agent:run` reads project instruction files, opencode-style,
+and appends them to the system prompt:
+
+- **Per-file precedence:** `AGENTS.md` (the cross-tool standard) is preferred, with
+  `CLAUDE.md` as the Claude-Code-compatible fallback and `GEMINI.md` last. First
+  match wins; the others are ignored (they're usually symlinks to the same file).
+- **Directory-tree walk:** the search walks *up* from `cwd`, and the nearest
+  ancestor's instruction file wins -- so running cluade from a subdirectory still
+  picks up the project root's `AGENTS.md`. The walk stops at the git root (a `.git`
+  dir/file), so unrelated files above the repo are never read.
+- **Global file:** an instruction file in `~/.cluade/` applies across all projects.
+  It is concatenated *ahead* of the local file, so a project file overrides personal
+  defaults.
 
 The augmentations (this file plus the available-skills list) are rebuilt fresh
 on every turn -- and re-applied after a `compact` -- so they appear exactly once
