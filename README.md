@@ -53,7 +53,7 @@ machinery that needs a heavier runtime.
 | Explicit loop detection | ✅ warn-then-stop | ⚠️ internal | ⚠️ internal |
 | Save/resume/list sessions | ✅ | ✅ | ✅ |
 | Auto-memory (self-written notes) | ❌ | ❌ | ✅ |
-| Subagents / parallelism | ❌ | ✅ | ✅ |
+| Subagents / parallelism | ⚠️ subprocess (shell-parallel) | ✅ | ✅ |
 | MCP servers | ❌ | ✅ | ✅ |
 | Hooks / plugins | ❌ | ✅ | ✅ |
 | LSP diagnostics | ❌ | ✅ | ⚠️ via IDE |
@@ -339,6 +339,37 @@ model mistake without babysitting): it flags only
 It prefers false negatives to false positives: an obfuscated destructive command
 can slip through, which is acceptable because the model is an occasional bungler,
 not an adversary trying to evade the check.
+
+### 4.8 Subagents (`subagent` tool + `--subagent` mode)
+
+cluade does subagents the Unix way: **a one-shot child process**, not in-process
+concurrency. The `subagent(prompt, mode)` tool spawns a child `cluade` in
+`--subagent` mode, captures its final answer, and returns it — giving the parent
+**context isolation** (the child's exploration burns its own context, not the
+parent's). Parallelism, when wanted, is delegated to the shell
+(`cluade … & cluade … & wait`, or `xargs -P`), which keeps the resource cost an
+explicit, operator-controlled knob — fitting for a constrained device.
+
+**Modes** (after opencode's plan/build):
+- `build` (default) — full toolset; can create/edit/delete files unattended.
+- `plan` — read-only toolset (`read`/`grep`/`glob`/`web_*`); for research/review.
+
+**`--subagent` is an unattended preset** = `--quiet` (final answer → stdout,
+progress → stderr) + `--no-session` (no traces) + the unattended permission rule
+below. Both `--quiet` and `--no-session` also work standalone.
+
+**Two structural guards, no new machinery:**
+- *Recursion* is capped at depth 1 **by construction** — a subagent's toolset
+  omits `subagent`, so it simply cannot spawn another (no counter needed).
+- *Permissions* follow one rule for an unattended agent: **anything that would
+  prompt is refused.** `allow` stays `allow` (so the knife still cuts — `write`,
+  `edit`, and ordinary `bash` run freely), but any `ask` becomes `deny`, and a
+  `dangercheck` hit becomes a hard `deny` instead of a prompt. So a build
+  subagent has full file-mutation freedom while the catastrophic set (§4.7) and
+  `remote_bash` are simply walled off — there's no human to approve them.
+
+The operator owns their own protection (git, backups); cluade is a tool that
+cuts, not a tool that refuses to.
 
 ---
 
