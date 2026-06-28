@@ -15,7 +15,10 @@ local ESC_REV = {b='\b', f='\f', n='\n', r='\r', t='\t'}
 
 local function _encode_string(s)
   s = s:gsub('\0', '')     -- strip null bytes
-  s = s:gsub("[" .. string.char(127) .. "-" .. string.char(255) .. "]", '?')  -- replace non-ASCII
+  -- Pass UTF-8 (bytes >= 128) through untouched: raw UTF-8 is valid inside a
+  -- JSON string, and the decoder handles it. Control chars, quotes, and
+  -- backslashes are still escaped below. (Previously these bytes were replaced
+  -- with '?', which silently corrupted all non-ASCII in requests and sessions.)
   return '"' .. s:gsub('[%c"\\]', function(c)
     local esc = ESCAPES[c]
     if esc then return esc end
