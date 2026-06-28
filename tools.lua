@@ -73,7 +73,22 @@ local DEFAULT_PERMISSIONS = {
   remote_bash = "ask",
   compact    = "allow",
   skill      = "allow",
+  subagent   = "allow",
 }
+
+-- The command that re-invokes cluade itself, set by the bootstrap (cluade.lua).
+-- Used to spawn subagents as child processes.
+local self_cmd = nil
+function Tools.set_self_cmd(cmd) self_cmd = cmd end
+
+-- Build the child invocation for a subagent: cluade in --subagent mode (quiet +
+-- ephemeral + dangercheck-as-deny), read-only when mode is "plan". The prompt is
+-- shell-escaped so it can't break out of the command.
+function Tools._subagent_cmd(cmd, prompt, mode)
+  local q = "'" .. tostring(prompt):gsub("'", "'\\''") .. "'"
+  local flag = (mode == "plan") and " --plan" or ""
+  return cmd .. " --subagent" .. flag .. " " .. q
+end
 
 local DEFS = {}
 
@@ -234,6 +249,22 @@ DEFS.compact = {
         summary = { type = "string", description = "Paragraph summarizing progress, key decisions, files changed, and next steps" },
       },
       required = { "summary" },
+    },
+  },
+}
+
+DEFS.subagent = {
+  type = "function",
+  ["function"] = {
+    name = "subagent",
+    description = "Delegate a self-contained task to a child cluade with its own fresh context; returns only its final answer. Use it to keep your own context clean (research, lookups, reviews) or to hand off an independent chunk of work. mode 'build' (default) has full tools and can create/edit/delete files; mode 'plan' is read-only. The subagent runs unattended: it cannot prompt, and catastrophic commands are refused.",
+    parameters = {
+      type = "object",
+      properties = {
+        prompt = { type = "string", description = "The complete, self-contained task for the subagent." },
+        mode = { type = "string", description = "'build' (default): full tools incl. file writes. 'plan': read-only (read/grep/glob/web)." },
+      },
+      required = { "prompt" },
     },
   },
 }
@@ -490,6 +521,24 @@ function Tools.execute_compact(cwd, params)
   return ({ status = "compacted", summary = params.summary }), _token_estimate(params.summary)
 end
 
+function Tools.execute_subagent(cwd, params)
+  if not self_cmd then
+    return ({ status = "error", error = "subagent unavailable: cluade self-command not set" }), 0
+  end
+  if not params.prompt or params.prompt == "" then
+    return ({ status = "error", error = "subagent requires a non-empty 'prompt'" }), 0
+  end
+  -- The child writes its final answer to stdout (progress goes to its stderr,
+  -- which passes through to ours); io.popen captures only that final answer.
+  local cmd = Tools._subagent_cmd(self_cmd, params.prompt, params.mode)
+  local f = io.popen(cmd)
+  local out = f and f:read("*a") or ""
+  if f then f:close() end
+  out = out:gsub("%s+$", "")
+  if out == "" then out = "(subagent returned no text)" end
+  return ({ status = "ok", output = out }), _token_estimate(out)
+end
+
 function Tools.execute_skill(cwd, params)
   local skills = _scan_skills()
   for _, s in ipairs(skills) do
@@ -523,6 +572,7 @@ local EXECUTORS = {
   remote_bash = Tools.execute_remote_bash,
   compact     = Tools.execute_compact,
   skill       = Tools.execute_skill,
+  subagent    = Tools.execute_subagent,
 }
 
 function Tools.get_definitions(names)

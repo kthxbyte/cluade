@@ -26,6 +26,15 @@ end
 
 package.path = script_dir .. "/?.lua;" .. script_dir .. "/?/init.lua;" .. package.path
 
+-- How to re-invoke cluade itself (interpreter + entry script), used to spawn
+-- subagents as child processes. arg[-1] is the interpreter that launched us.
+local self_cmd
+do
+  local interp = (arg and arg[-1]) or "lua5.1"
+  local q = function(s) return "'" .. s:gsub("'", "'\\''") .. "'" end
+  self_cmd = q(interp) .. " " .. q(script_dir .. "/cluade.lua")
+end
+
 local json = require("vendor.json")
 local Store = require("store")
 local Agent = require("agent")
@@ -94,6 +103,11 @@ Options:
   -y, --yes                Auto-approve all permission prompts
   --init                   Initialize a config file
   --show-tools-json        Debug: print raw response body + decoded tool_calls + compact view
+  --subagent               Unattended child mode: only the final answer to stdout,
+                           no session traces, catastrophic commands hard-denied
+  --plan                   With --subagent: read-only toolset (no write/edit/bash)
+  --quiet                  Only the final answer to stdout; progress to stderr
+  --no-session             Do not persist a session
   -h, --help               Show this help
 
 Examples:
@@ -130,6 +144,14 @@ local function parse_args(argv)
       args.init = true
     elseif a == "--show-tools-json" then
       args.show_tools_json = true
+    elseif a == "--subagent" then
+      args.subagent = true
+    elseif a == "--plan" then
+      args.plan = true
+    elseif a == "--quiet" then
+      args.quiet = true
+    elseif a == "--no-session" then
+      args.no_session = true
     elseif a:sub(1, 1) ~= "-" then
       args.prompt = (args.prompt and args.prompt .. " " or "") .. a
     end
@@ -156,6 +178,17 @@ if args.model then config.model = args.model end
 if args.base_url then config.base_url = args.base_url end
 if args.api_key then config.api_key = args.api_key end
 if args.show_tools_json then config.show_tools_json = true end
+
+-- --subagent is the preset for an unattended child agent: quiet output (final
+-- answer to stdout, progress to stderr), no session traces, dangercheck-as-deny.
+-- --quiet / --no-session are also usable on their own; --plan makes a subagent
+-- read-only.
+if args.subagent then config.subagent = true; config.quiet = true; config.ephemeral = true end
+if args.plan then config.plan = true end
+if args.quiet then config.quiet = true end
+if args.no_session then config.ephemeral = true end
+
+require("tools").set_self_cmd(self_cmd)
 
 if args.init then
   local config_dir = os.getenv("HOME") .. "/.cluade"
@@ -213,10 +246,16 @@ elseif args.resume then
   print("resumed session " .. args.resume)
 else
   session = Store.new_session_data(args.cwd)
-  Store.save_session(sessions_dir, session.id, session)
+  if not config.ephemeral then
+    Store.save_session(sessions_dir, session.id, session)
+  end
 end
 
-Store.set_last_session_id(home, session.id)
+-- An ephemeral (--subagent / --no-session) run leaves no trace: no session file
+-- and no update to the "last session" pointer.
+if not config.ephemeral then
+  Store.set_last_session_id(home, session.id)
+end
 
 local agent = Agent:init(config, args.cwd)
 
@@ -227,12 +266,15 @@ end
 
 if args.prompt then
   agent:run(session, args.prompt)
-  local used = session.total_tokens or 0
-  local ctx = session.context_tokens or 0
-  local context_limit = config.context_limit or 200000
-  local pct = math.floor(ctx / context_limit * 100 * 10) / 10
-  print(c.dim(string.format("-- %s - %d tokens - %.1f%% context",
-    config.model or "?", used, pct)))
+  -- In quiet mode, stdout must carry only the subagent's answer -- no summary.
+  if not config.quiet then
+    local used = session.total_tokens or 0
+    local ctx = session.context_tokens or 0
+    local context_limit = config.context_limit or 200000
+    local pct = math.floor(ctx / context_limit * 100 * 10) / 10
+    print(c.dim(string.format("-- %s - %d tokens - %.1f%% context",
+      config.model or "?", used, pct)))
+  end
 else
   print(c.cyan("cluade session " .. session.id .. " -- " .. (config.model or "?")))
   print(c.dim("Type /help for commands, Ctrl+D to exit"))

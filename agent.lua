@@ -85,10 +85,37 @@ function Agent._format_tools_debug(response)
   return table.concat(out, "\n")
 end
 
-function Agent._effective_perm(base, name, params)
+-- The toolset for a run. A subagent never receives the `subagent` tool, so
+-- recursion is capped at depth 1 by construction (no counter needed). A plan
+-- subagent is read-only by toolset; a build subagent keeps the full set (minus
+-- subagent) so it can create/edit/delete files unattended.
+function Agent._tool_names(config)
+  config = config or {}
+  if config.subagent and config.plan then
+    return { "read", "grep", "glob", "web_search", "web_fetch" }
+  end
+  local names = { "read", "write", "edit", "bash", "glob", "grep",
+    "web_search", "web_fetch", "remote_bash", "compact", "skill", "subagent" }
+  if not config.subagent then return names end
+  local out = {}
+  for _, n in ipairs(names) do
+    if n ~= "subagent" then out[#out + 1] = n end
+  end
+  return out
+end
+
+-- Resolve the effective permission for a tool call. `subagent` is true in
+-- unattended --subagent mode, where the single rule is: no human to approve, so
+-- anything that would prompt is refused. A dangercheck hit (normally an "ask")
+-- becomes a hard "deny"; any base "ask" becomes "deny". "allow" stays "allow",
+-- so the knife still cuts -- write/edit and ordinary bash run unattended.
+function Agent._effective_perm(base, name, params, subagent)
   if base == "allow" and name == "bash" and type(params) == "table" and params.command then
     local reason = dangercheck.match(params.command)
-    if reason then return "ask", reason end
+    if reason then return (subagent and "deny" or "ask"), reason end
+  end
+  if subagent and base == "ask" then
+    return "deny", "no human to approve in --subagent mode"
   end
   return base, nil
 end
@@ -261,6 +288,18 @@ function Agent:run(session, input)
   local HttpProvider = provider
   local llm = HttpProvider:new(self.config)
 
+  -- Quiet (--subagent) mode: route all progress chatter to stderr and emit only
+  -- the final assistant message to stdout, so a parent can capture the result
+  -- cleanly. Done by swapping io.write/io.flush for the duration of the run and
+  -- restoring them before printing the captured answer to the real stdout.
+  local quiet = self.config.quiet
+  local _real_write, _real_flush = io.write, io.flush
+  if quiet then
+    io.write = function(...) return io.stderr:write(...) end
+    io.flush = function() return io.stderr:flush() end
+  end
+  local last_content = nil
+
   local messages = {}
   for _, m in ipairs(session.messages) do
     messages[#messages + 1] = m
@@ -284,7 +323,7 @@ function Agent:run(session, input)
     messages[#messages + 1] = { role = "user", content = input }
   end
 
-  local tool_names = { "read", "write", "edit", "bash", "glob", "grep", "web_search", "web_fetch", "remote_bash", "compact", "skill" }
+  local tool_names = Agent._tool_names(self.config)
   local tool_defs = self.tools.get_definitions(tool_names)
   local total_tokens = 0
 
@@ -335,6 +374,7 @@ function Agent:run(session, input)
       io.write("\n" .. c.dim("[took " .. elapsed .. "s]") .. "\n")
     end
     if response.content and #response.content > 0 then
+      last_content = response.content
       io.write("\n" .. response.content .. "\n")
       io.flush()
     end
@@ -360,8 +400,9 @@ function Agent:run(session, input)
           for k, v in pairs(args_str) do params[k] = v end
         end
 
-        -- Smart bash gate may escalate an allowed-but-dangerous command to a prompt.
-        local perm, flagged = Agent._effective_perm(base_perm, name, params)
+        -- Smart bash gate may escalate an allowed-but-dangerous command to a prompt
+        -- (attended) or a hard deny (unattended --subagent mode).
+        local perm, flagged = Agent._effective_perm(base_perm, name, params, self.config.subagent)
 
         local result = nil
         if perm == "deny" then
@@ -463,6 +504,12 @@ function Agent:run(session, input)
       "\n[stopped: the model appears stuck (repeated the same action or errored repeatedly). send 'continue' to resume.]") .. "\n")
   end
 
+  -- Restore real output and emit only the final answer to stdout (quiet mode).
+  if quiet then
+    io.write, io.flush = _real_write, _real_flush
+    if last_content then _real_write(last_content .. "\n") end
+  end
+
   local new_messages = {}
   for _, m in ipairs(messages) do
     new_messages[#new_messages + 1] = m
@@ -471,7 +518,10 @@ function Agent:run(session, input)
   session.steps = last_step
   session.total_tokens = total_tokens
   session.context_tokens = _estimate_total()
-  Store.save_session(self.config.sessions_dir, session.id, session)
+  -- Ephemeral (--subagent) runs leave no trace on disk.
+  if not self.config.ephemeral then
+    Store.save_session(self.config.sessions_dir, session.id, session)
+  end
 end
 
 return Agent
