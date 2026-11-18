@@ -122,12 +122,24 @@ function Store.list_sessions(sessions_dir)
       if raw then
         local ok, parsed = pcall(json.decode, raw)
         if ok then
-          sessions[#sessions + 1] = {
-            id = id,
-            created = parsed.created or "",
-            messages = #(parsed.messages or {}),
-            cwd = parsed.cwd or "",
-          }
+          local msgs = parsed.messages or {}
+          -- Skip empty sessions (none should be persisted now, but legacy ones
+          -- may exist). A title is the stored one, else a first-user snippet.
+          if #msgs > 0 then
+            local title = parsed.title
+            if not title then
+              for _, m in ipairs(msgs) do
+                if m.role == "user" then title = Store.title_snippet(m.content); break end
+              end
+            end
+            sessions[#sessions + 1] = {
+              id = id,
+              created = parsed.created or "",
+              messages = #msgs,
+              cwd = parsed.cwd or "",
+              title = title,
+            }
+          end
         end
       end
     end
@@ -149,6 +161,17 @@ end
 
 function Store.make_session_id()
   return os.date("%Y%m%d-%H%M%S") .. "-" .. tostring(math.random(1000, 9999))
+end
+
+-- A one-line title snippet from arbitrary text: first line, trimmed, truncated
+-- to 50 chars (+ ellipsis) if longer. Returns nil for empty/non-string input.
+-- Used as the session-title fallback and to label untitled sessions in listings.
+function Store.title_snippet(text)
+  if type(text) ~= "string" then return nil end
+  local line = (text:match("^[^\n]*") or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  if #line == 0 then return nil end
+  if #line > 50 then line = line:sub(1, 50) .. "..." end
+  return line
 end
 
 function Store.new_session_data(cwd)

@@ -71,6 +71,7 @@ local DEFAULT_PERMISSIONS = {
   web_search = "allow",
   web_fetch  = "allow",
   compact    = "allow",
+  set_title  = "allow",
   skill      = "allow",
   subagent   = "allow",
   ask        = "allow",
@@ -290,6 +291,21 @@ DEFS.ask = {
         multiple = { type = "boolean", description = "Allow selecting more than one option (default false)" },
       },
       required = { "question" },
+    },
+  },
+}
+
+DEFS.set_title = {
+  type = "function",
+  ["function"] = {
+    name = "set_title",
+    description = "Set a short title (3-6 words) for this session, once its purpose is clear. Call it once, on your own -- don't ask the user.",
+    parameters = {
+      type = "object",
+      properties = {
+        title = { type = "string", description = "Concise 3-6 word session title" },
+      },
+      required = { "title" },
     },
   },
 }
@@ -670,6 +686,21 @@ function Tools.execute_ask(cwd, params)
   return { status = "ok", output = table.concat(chosen, ", ") }
 end
 
+-- Returns a special "titled" status the run loop applies to session.title
+-- (mirrors execute_compact). The title is cleaned to one trimmed line, <= 60 ch.
+function Tools.execute_set_title(cwd, params)
+  local t = params and params.title
+  if type(t) ~= "string" then
+    return ({ status = "error", error = "set_title requires a 'title'" }), 0
+  end
+  t = (t:match("^[^\n]*") or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  if #t == 0 then
+    return ({ status = "error", error = "set_title requires a non-empty 'title'" }), 0
+  end
+  if #t > 60 then t = t:sub(1, 60) end
+  return ({ status = "titled", title = t }), _token_estimate(t)
+end
+
 -- === registry ===
 
 local EXECUTORS = {
@@ -685,6 +716,7 @@ local EXECUTORS = {
   skill       = Tools.execute_skill,
   subagent    = Tools.execute_subagent,
   ask         = Tools.execute_ask,
+  set_title   = Tools.execute_set_title,
 }
 
 function Tools.get_definitions(names)

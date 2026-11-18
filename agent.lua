@@ -98,13 +98,13 @@ function Agent._tool_names(config)
     return { "read", "grep", "glob", "web_search", "web_fetch" }
   end
   local names = { "read", "write", "edit", "bash", "glob", "grep",
-    "web_search", "web_fetch", "compact", "skill", "subagent", "ask" }
+    "web_search", "web_fetch", "compact", "skill", "subagent", "ask", "set_title" }
   if not config.subagent then return names end
-  -- An unattended subagent has no human to answer `ask` and must not spawn
-  -- another subagent, so both are dropped from its toolset.
+  -- An unattended subagent has no human to answer `ask`, no persisted session to
+  -- title, and must not spawn another subagent -- all three are dropped.
   local out = {}
   for _, n in ipairs(names) do
-    if n ~= "subagent" and n ~= "ask" then out[#out + 1] = n end
+    if n ~= "subagent" and n ~= "ask" and n ~= "set_title" then out[#out + 1] = n end
   end
   return out
 end
@@ -209,7 +209,7 @@ local AUGMENT_MARK = "\n\n-- cluade session context (rebuilt each turn) --\n\n"
 -- The per-turn additions to the system message: the available-skills list and
 -- the ./CLAUDE.md instructions. Recomputed fresh every run so they appear
 -- exactly once regardless of how many turns or resumes a session has had.
-function Agent:_augmentations()
+function Agent:_augmentations(want_title)
   local parts = {}
   local skills = self.tools._scan_skills and self.tools._scan_skills() or {}
   if #skills > 0 then
@@ -221,6 +221,9 @@ function Agent:_augmentations()
   end
   local instructions = self:_read_instructions()
   if instructions then parts[#parts + 1] = instructions end
+  if want_title then
+    parts[#parts + 1] = "Name this session: once its purpose is clear (after a message or two), call set_title once with a concise 3-6 word title. Decide it yourself; don't ask."
+  end
   return table.concat(parts, "\n\n")
 end
 
@@ -332,7 +335,7 @@ function Agent:run(session, input)
   local content = messages[1].content
   local mark = content:find(AUGMENT_MARK, 1, true)
   local base = mark and content:sub(1, mark - 1) or content
-  local aug = self:_augmentations()
+  local aug = self:_augmentations((not self.config.subagent) and (not session.title or session.title == ""))
   messages[1].content = (#aug > 0) and (base .. AUGMENT_MARK .. aug) or base
 
   if input then
@@ -474,7 +477,7 @@ function Agent:run(session, input)
           -- Re-add the per-turn augmentations so the steps remaining in this run
           -- still see the ./CLAUDE.md instructions and skills list. Using the
           -- marker keeps the next turn's rebuild idempotent (no duplication).
-          local aug = self:_augmentations()
+          local aug = self:_augmentations((not self.config.subagent) and (not session.title or session.title == ""))
           if #aug > 0 then compact_msg = compact_msg .. AUGMENT_MARK .. aug end
           local new_messages = {
             { role = "system", content = compact_msg },
@@ -483,6 +486,11 @@ function Agent:run(session, input)
           new_messages[#new_messages + 1] = messages[#messages]
           messages = new_messages
           io.write(c.step("[Compacted: context freed for next task]") .. "\n")
+        end
+
+        if name == "set_title" and result.status == "titled" then
+          -- Set-once: the first title (model's, or a later snippet) sticks.
+          if not session.title or session.title == "" then session.title = result.title end
         end
       end
 
@@ -547,6 +555,12 @@ function Agent:run(session, input)
   session.completion_tokens = completion_total
   session.cache_hit_tokens = cache_hit_total
   session.cache_miss_tokens = cache_miss_total
+  -- Backfill a title from the first user message if nothing titled this session.
+  if not self.config.ephemeral and (not session.title or session.title == "") then
+    for _, m in ipairs(session.messages) do
+      if m.role == "user" then session.title = Store.title_snippet(m.content); break end
+    end
+  end
   -- Ephemeral (--subagent) runs leave no trace on disk.
   if not self.config.ephemeral then
     Store.save_session(self.config.sessions_dir, session.id, session)
