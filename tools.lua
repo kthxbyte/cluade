@@ -70,7 +70,6 @@ local DEFAULT_PERMISSIONS = {
   grep       = "allow",
   web_search = "allow",
   web_fetch  = "allow",
-  remote_bash = "ask",
   compact    = "allow",
   skill      = "allow",
   subagent   = "allow",
@@ -217,24 +216,6 @@ DEFS.web_fetch = {
         url = { type = "string", description = "URL to fetch" },
       },
       required = { "url" },
-    },
-  },
-}
-
-DEFS.remote_bash = {
-  type = "function",
-  ["function"] = {
-    name = "remote_bash",
-    description = "Execute a shell command on a remote host via SSH (uses SSH keys, not passwords).",
-    parameters = {
-      type = "object",
-      properties = {
-        host     = { type = "string", description = "Remote hostname or IP" },
-        command  = { type = "string", description = "Shell command to run on the remote host" },
-        username = { type = "string", description = "SSH username (default: root)" },
-        port     = { type = "integer", description = "SSH port (default: 22)" },
-      },
-      required = { "host", "command" },
     },
   },
 }
@@ -531,21 +512,6 @@ function Tools.execute_web_fetch(cwd, params)
   return ({ status = "ok", output = content }), _token_estimate(content)
 end
 
-function Tools.execute_remote_bash(cwd, params)
-  local host = params.host
-  local command = params.command
-  local username = params.username or "root"
-  local port = params.port or "22"
-
-  local cmd = "ssh -y -p " .. port .. " " .. username .. "@" .. host .. " " .. _shell_escape(command)
-  local output, exit_code = _run(cmd)
-  local result = output or ""
-  if exit_code and exit_code ~= 0 then
-    result = result .. "\n[exit code: " .. exit_code .. "]"
-  end
-  return ({ status = "ok", output = result }), _token_estimate(result)
-end
-
 function Tools.execute_compact(cwd, params)
   return ({ status = "compacted", summary = params.summary }), _token_estimate(params.summary)
 end
@@ -715,7 +681,6 @@ local EXECUTORS = {
   grep        = Tools.execute_grep,
   web_search  = Tools.execute_web_search,
   web_fetch   = Tools.execute_web_fetch,
-  remote_bash = Tools.execute_remote_bash,
   compact     = Tools.execute_compact,
   skill       = Tools.execute_skill,
   subagent    = Tools.execute_subagent,

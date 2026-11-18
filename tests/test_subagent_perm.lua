@@ -18,7 +18,7 @@ local function perm(...) return (select(1, Agent._effective_perm(...))) end
 do
   ok(perm("allow", "bash", { command = "ls -la" }) == "allow", "normal: safe bash allowed")
   ok(perm("allow", "bash", { command = "rm -rf /" }) == "ask", "normal: catastrophic bash -> ask (prompt)")
-  ok(perm("ask", "remote_bash", {}) == "ask", "normal: remote_bash stays ask")
+  ok(perm("ask", "write", {}) == "ask", "normal: a config-set 'ask' tool stays ask")
   ok(perm("allow", "write", {}) == "allow", "normal: write allowed")
 end
 
@@ -29,7 +29,7 @@ do
   ok(perm("allow", "edit", {}, true) == "allow", "subagent: edit still allowed")
   ok(perm("allow", "bash", { command = "rm -rf ./build" }, true) == "allow", "subagent: ordinary rm of a subdir allowed")
   ok(perm("allow", "bash", { command = "rm -rf /" }, true) == "deny", "subagent: catastrophic bash -> deny (no human)")
-  ok(perm("ask", "remote_bash", {}, true) == "deny", "subagent: would-be-ask remote_bash -> deny")
+  ok(perm("ask", "write", {}, true) == "deny", "subagent: a would-be-ask tool -> deny")
   ok(perm("deny", "bash", { command = "ls" }, true) == "deny", "subagent: explicit deny stays deny")
 end
 

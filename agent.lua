@@ -98,7 +98,7 @@ function Agent._tool_names(config)
     return { "read", "grep", "glob", "web_search", "web_fetch" }
   end
   local names = { "read", "write", "edit", "bash", "glob", "grep",
-    "web_search", "web_fetch", "remote_bash", "compact", "skill", "subagent", "ask" }
+    "web_search", "web_fetch", "compact", "skill", "subagent", "ask" }
   if not config.subagent then return names end
   -- An unattended subagent has no human to answer `ask` and must not spawn
   -- another subagent, so both are dropped from its toolset.
@@ -438,8 +438,6 @@ function Agent:run(session, input)
           if name == "bash" then
             prompt = "bash: " .. (params.command and params.command:sub(1, 80) or "?")
             if flagged then prompt = prompt .. c.yellow("  [flagged: " .. flagged .. "]") end
-          elseif name == "remote_bash" then
-            prompt = "remote_bash: " .. (params.username or "root") .. "@" .. (params.host or "?") .. ": " .. (params.command and params.command:sub(1, 60) or "?")
           elseif name == "write" then
             prompt = "write: " .. (params.filePath or "?")
           end

@@ -192,7 +192,7 @@ if args.no_session then config.ephemeral = true end
 require("tools").set_self_cmd(self_cmd)
 
 if args.init then
-  config.permissions = config.permissions or { bash = "allow", remote_bash = "ask", write = "allow" }
+  config.permissions = config.permissions or { bash = "allow", write = "allow" }
   local pr = hostprobe.probe()
   config.system_prompt = hostprobe.build_prompt(pr)
   config.host = hostprobe.fingerprint(pr)
@@ -282,7 +282,7 @@ local agent = Agent:init(config, args.cwd)
 
 if args.yes then
   local tools = require("tools")
-  tools.set_permissions({ bash = "allow", remote_bash = "allow", write = "allow" })
+  tools.set_permissions({ bash = "allow", write = "allow" })
 end
 
 if args.prompt then
