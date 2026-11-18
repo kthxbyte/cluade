@@ -38,6 +38,7 @@ end
 local json = require("vendor.json")
 local Store = require("store")
 local Agent = require("agent")
+local hostprobe = require("hostprobe")
 local c = require("colors")
 local lineedit = require("lineedit")
 
@@ -191,20 +192,12 @@ if args.no_session then config.ephemeral = true end
 require("tools").set_self_cmd(self_cmd)
 
 if args.init then
-  local config_dir = os.getenv("HOME") .. "/.cluade"
-  os.execute('mkdir -p "' .. config_dir .. '" 2>/dev/null')
-  local f = io.open(config_dir .. "/config.json", "w")
-  f:write(json.encode({
-    base_url = config.base_url,
-    model = config.model,
-    api_key = config.api_key,
-    max_steps = 100,
-    max_tokens = 131072,
-    request_timeout = 600,
-    permissions = { bash = "allow", remote_bash = "ask", write = "allow" },
-  }) .. "\n")
-  f:close()
-  print("written " .. config_dir .. "/config.json")
+  config.permissions = config.permissions or { bash = "allow", remote_bash = "ask", write = "allow" }
+  local pr = hostprobe.probe()
+  config.system_prompt = hostprobe.build_prompt(pr)
+  config.host = hostprobe.fingerprint(pr)
+  Store.save_config(home, config)
+  print("written " .. home .. "/.cluade/config.json")
   os.exit(0)
 end
 
@@ -255,6 +248,29 @@ end
 -- and no update to the "last session" pointer.
 if not config.ephemeral then
   Store.set_last_session_id(home, session.id)
+end
+
+-- Calibrate the system prompt to this host before the agent starts. First run
+-- (no stored prompt/host) generates and persists it; a later boot on a different
+-- host offers to regenerate (prompt-to-regenerate). In non-interactive or
+-- --subagent/--quiet runs there is no human to ask and nothing is written on
+-- drift -- a one-line notice goes to stderr so stdout stays the clean answer.
+do
+  local interactive = (os.execute("test -t 0 2>/dev/null") == 0)
+    and not config.quiet and not config.subagent
+  local ask_fn = interactive and function(q) return Agent.prompt_yes_no(Agent, q) end or nil
+  local emit = config.quiet and function(s) io.stderr:write(s .. "\n") end
+    or function(s) print(s) end
+  local action, msg = hostprobe.resolve(config, hostprobe.probe(), ask_fn)
+  if action == "generated" then
+    Store.save_config(home, config)
+    emit("created " .. home .. "/.cluade/config.json (add your api_key)")
+  elseif action == "regenerated" then
+    Store.save_config(home, config)
+    emit("regenerated system prompt (" .. msg .. ")")
+  elseif action == "drift" then
+    emit("note: host changed (" .. msg .. "); run --init to regenerate the system prompt")
+  end
 end
 
 local agent = Agent:init(config, args.cwd)
