@@ -47,6 +47,16 @@ ok(cfg.system_prompt == "KEEP", "declined regenerate keeps the stored prompt")
 ok(select(1, hostprobe.resolve(cfg, pr, nil)) == "drift", "drift + no asker -> drift")
 ok(cfg.system_prompt == "KEEP", "non-interactive drift mutates nothing")
 
+-- 6b. The drift question must NOT include a "[y/N]" suffix -- Agent:prompt_yes_no
+-- appends its own, so embedding one here would show the user "[y/N] [y/N]".
+do
+  local cfg3 = { system_prompt = "P", host = hostprobe.fingerprint(pr) }
+  local asked
+  hostprobe.resolve(cfg3, pr2, function(q) asked = q; return false end)
+  ok(asked and asked:find("[y/N]", 1, true) == nil, "drift question carries no [y/N] suffix")
+  ok(asked and asked:lower():find("regenerate") ~= nil, "drift question still asks about regenerating")
+end
+
 -- 7. save_config persists the whitelist and drops runtime-only flags.
 local home = os.tmpname(); os.remove(home); os.execute("mkdir -p '" .. home .. "'")
 Store.save_config(home, {

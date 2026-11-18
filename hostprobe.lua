@@ -121,7 +121,8 @@ function M.resolve(config, probe, ask_fn)
   end
 
   local transition = label(config.host) .. " -> " .. label(current)
-  if ask_fn and ask_fn("host changed (" .. transition .. "); regenerate system prompt? [y/N]") then
+  -- No "[y/N]" here: the caller's yes/no prompt (Agent:prompt_yes_no) appends it.
+  if ask_fn and ask_fn("host changed (" .. transition .. "); regenerate system prompt?") then
     apply()
     return "regenerated", transition
   end
