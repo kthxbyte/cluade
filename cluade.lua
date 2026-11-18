@@ -289,12 +289,11 @@ if args.prompt then
   agent:run(session, args.prompt)
   -- In quiet mode, stdout must carry only the subagent's answer -- no summary.
   if not config.quiet then
-    local used = session.total_tokens or 0
-    local ctx = session.context_tokens or 0
-    local context_limit = config.context_limit or 200000
-    local pct = math.floor(ctx / context_limit * 100 * 10) / 10
-    print(c.dim(string.format("-- %s - %d tokens - %.1f%% context",
-      config.model or "?", used, pct)))
+    print(c.dim("-- " .. Agent.format_status({
+      model = config.model, context_tokens = session.context_tokens,
+      context_limit = config.context_limit, completion_tokens = session.completion_tokens,
+      cache_hit = session.cache_hit_tokens, cache_miss = session.cache_miss_tokens,
+    })))
   end
 else
   print(c.cyan("cluade session " .. session.id .. " -- " .. (config.model or "?")))
@@ -327,12 +326,12 @@ else
           local t0 = os.time()
           agent:run(session, line)
           local elapsed = os.time() - t0
-          local used = session.total_tokens or 0
-          local ctx = session.context_tokens or 0
-          local context_limit = config.context_limit or 200000
-          local pct = math.floor(ctx / context_limit * 100 * 10) / 10
-          print(c.dim(string.format("-- %s - %d tokens - %.1f%% context - %ds",
-            config.model or "?", used, pct, elapsed)))
+          print(c.dim("-- " .. Agent.format_status({
+            model = config.model, context_tokens = session.context_tokens,
+            context_limit = config.context_limit, completion_tokens = session.completion_tokens,
+            cache_hit = session.cache_hit_tokens, cache_miss = session.cache_miss_tokens,
+            elapsed = elapsed,
+          })))
         end
       end
     end
