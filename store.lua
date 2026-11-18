@@ -151,6 +151,17 @@ function Store.make_session_id()
   return os.date("%Y%m%d-%H%M%S") .. "-" .. tostring(math.random(1000, 9999))
 end
 
+-- A one-line title snippet from arbitrary text: first line, trimmed, truncated
+-- to 50 chars (+ ellipsis) if longer. Returns nil for empty/non-string input.
+-- Used as the session-title fallback and to label untitled sessions in listings.
+function Store.title_snippet(text)
+  if type(text) ~= "string" then return nil end
+  local line = (text:match("^[^\n]*") or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  if #line == 0 then return nil end
+  if #line > 50 then line = line:sub(1, 50) .. "..." end
+  return line
+end
+
 function Store.new_session_data(cwd)
   local home = os.getenv("HOME") or os.getenv("USERPROFILE") or "/tmp"
   return {
