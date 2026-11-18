@@ -45,7 +45,7 @@ machinery that needs a heavier runtime.
 | Interface | line REPL + one-shot | full TUI + IDE/desktop | terminal + IDE/desktop/web |
 | read/write/edit/bash/glob/grep | ✅ | ✅ | ✅ |
 | Web search + fetch | ✅ | ✅ | ✅ |
-| Remote shell over SSH | ✅ `remote_bash` | ❌ built-in | ❌ built-in |
+| Ask the user a question / choices | ✅ `ask` | ✅ | ✅ |
 | Project instructions (`AGENTS.md`…) | ✅ tree-walk + global | ✅ tree-walk + global | ✅ `CLAUDE.md` hierarchy |
 | Compaction | ✅ | ✅ | ✅ |
 | Skills (on-demand markdown) | ✅ | ✅ | ✅ |
@@ -63,8 +63,7 @@ machinery that needs a heavier runtime.
 
 **Where cluade wins:** it runs where the others structurally can't — busybox, MIPS, a
 Pi with no Node and little disk. It is genuinely model-agnostic (a remote provider *or*
-a local model on the LAN), and it ships one thing the big tools don't: **`remote_bash`**,
-so a cluade on one box can drive another over SSH.
+a local model on the LAN).
 
 **What you give up:** the heavyweight agent machinery — MCP, subagents, hooks, LSP,
 IDE/desktop/web surfaces, auto-memory, multimodal. Those need a richer runtime than the
@@ -145,7 +144,7 @@ Options:
 5. Determine session: `--continue`, `--resume ID`, or new session.
 6. Update `last_session` pointer.
 7. Create `Agent` with merged config and cwd.
-8. If `--yes`: set permissions for `bash`, `remote_bash`, `write` to `"allow"`.
+8. If `--yes`: set permissions for `bash`, `write` to `"allow"`.
 9. If a prompt was given: run agent once and exit.
 10. Otherwise: enter interactive REPL with line editing (arrow-key history, bracketed paste, inline cursor movement).
 
@@ -301,12 +300,12 @@ no matter how long the session runs, and survive compaction within a run.
 Three levels: `allow` (auto-execute), `ask` (prompt user `[y/N]`), `deny` (refuse with error).
 
 Effective defaults come from `DEFAULT_PERMISSIONS` in `tools.lua`:
-- `allow`: `read`, `write`, `edit`, `bash`, `glob`, `grep`, `web_search`, `web_fetch`, `compact`, `skill`
-- `ask`: `remote_bash`
+- `allow`: `read`, `write`, `edit`, `bash`, `glob`, `grep`, `web_search`, `web_fetch`, `compact`, `skill`, `subagent`, `ask`
+- `ask`: none by default (set per-tool in `config.json`)
 
 A `permissions` block in `config.json` overrides these per-tool (applied in
-`Agent:init`); only the tools you name change. `--yes` overrides `bash`,
-`remote_bash`, `write` to `allow` and takes precedence over both, since it runs
+`Agent:init`); only the tools you name change. `--yes` overrides `bash` and
+`write` to `allow` and takes precedence over both, since it runs
 after `Agent:init`. Effective precedence: `tools.lua` defaults < config < `--yes`.
 
 `ask` prompts go through `Agent:prompt_yes_no`, which saves the terminal mode,
@@ -365,8 +364,9 @@ below. Both `--quiet` and `--no-session` also work standalone.
   prompt is refused.** `allow` stays `allow` (so the knife still cuts — `write`,
   `edit`, and ordinary `bash` run freely), but any `ask` becomes `deny`, and a
   `dangercheck` hit becomes a hard `deny` instead of a prompt. So a build
-  subagent has full file-mutation freedom while the catastrophic set (§4.7) and
-  `remote_bash` are simply walled off — there's no human to approve them.
+  subagent has full file-mutation freedom while the catastrophic set (§4.7) is
+  walled off, and the interactive `ask` tool is dropped from its toolset
+  entirely — there's no human to answer it.
 
 The operator owns their own protection (git, backups); cluade is a tool that
 cuts, not a tool that refuses to.
@@ -425,7 +425,6 @@ wrap it in `extra_body` (that key does nothing).
 | `grep` | Search files with regex | `pattern` | `path`, `include` |
 | `web_search` | DuckDuckGo HTML search | `query` | — |
 | `web_fetch` | Fetch URL content | `url` | — |
-| `remote_bash` | Execute command on remote host via SSH key | `host`, `command` | `username`, `port` |
 | `compact` | Free context by summarizing conversation | `summary` | — |
 | `skill` | Load SKILL.md instructions for a skill | `name` | — |
 
@@ -446,8 +445,6 @@ wrap it in `extra_body` (that key does nothing).
 **`web_search`**: Fetches DuckDuckGo HTML with Chrome 147 user-agent, parses result links and snippets.
 
 **`web_fetch`**: Fetches URL with Chrome 147 user-agent, 15s timeout, caps response at 32KB.
-
-**`remote_bash`**: Uses `ssh -y` (dropbear host key acceptance) with SSH key authentication. Default user `root`, port `22`. No password support (key-only, for security).
 
 **`compact`**: LLM-driven context compaction. When called with a `summary`, the agent prunes conversation history after the system prompt, replacing it with the summary. LLM decides when to call it (nudged at 85% context threshold).
 
@@ -485,7 +482,6 @@ Merge order: hardcoded defaults → `~/.cluade/config.json` → `./.cluade/confi
 |------------|-------------|-------|
 | **Lua** 5.1 | Everything | Core runtime |
 | **curl** | provider.lua | HTTP transport to LLM API |
-| **Dropbear SSH** | remote_bash tool | `ssh -y` command (built into OpenWRT) |
 | **vendor/json.lua** | All JSON operations | Bundled, MIT-licensed, no C deps |
 
 No Python, no Node.js, no LuaSocket, no systemd — intentionally minimal.
@@ -510,7 +506,6 @@ No Python, no Node.js, no LuaSocket, no systemd — intentionally minimal.
   "compact_threshold": 0.85,
   "permissions": {
     "bash": "allow",
-    "remote_bash": "ask",
     "write": "allow"
   }
 }
@@ -560,10 +555,9 @@ bogus values like 288%.
 2. **LLM-driven compaction** — agent calls `compact(summary)` at milestones; nudged at 85% context threshold.
 3. **Skill system** — SKILL.md with YAML frontmatter (Claude Code compatible). Discovered at startup, loaded on demand.
 4. **Line editing** — pure Lua raw-terminal module: history ring, cursor keys, backspace, Delete, bracketed paste, Ctrl+C graceful.
-5. **SSH key-only** — remote_bash uses dropbear `ssh -y` with `~/.ssh/id_dropbear`. No sshpass, no passwords.
-6. **Chrome 147 UA** — web_search and web_fetch spoof a Chrome user-agent to avoid bot blocking.
-7. **ANSI colors** — cyan prompt, green tool labels, magenta status bar, red errors.
-8. **Loop detection** — deterministic warn-then-stop guard (`loopdetect.lua`, §4.5) replaces the old hard step cap: the model runs as long as it makes progress and is stopped only when it's actually stuck (identical calls or repeated errors). `config.max_steps` (default 100) remains as a high safety backstop.
+5. **Chrome 147 UA** — web_search and web_fetch spoof a Chrome user-agent to avoid bot blocking.
+6. **ANSI colors** — cyan prompt, green tool labels, magenta status bar, red errors.
+7. **Loop detection** — deterministic warn-then-stop guard (`loopdetect.lua`, §4.5) replaces the old hard step cap: the model runs as long as it makes progress and is stopped only when it's actually stuck (identical calls or repeated errors). `config.max_steps` (default 100) remains as a high safety backstop.
 9. **Smart bash gate** — `bash` stays `allow` for flow, but a conservative detector (`dangercheck.lua`, §4.7) escalates only catastrophic, irreversible commands to a confirmation prompt. Protects against model error without babysitting; prefers false negatives to false positives.
 
 ---

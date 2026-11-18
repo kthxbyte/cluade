@@ -22,7 +22,7 @@ M.SUPPORTED = {
   read = "read", write = "write", edit = "edit", multiedit = "edit",
   bash = "bash", glob = "glob", grep = "grep",
   websearch = "web_search", webfetch = "web_fetch",
-  remotebash = "remote_bash", compact = "compact", skill = "skill",
+  compact = "compact", skill = "skill",
 }
 
 -- Casing/separator-insensitive: "WebSearch", "web_search", "web-search" all match.
