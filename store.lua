@@ -73,6 +73,23 @@ function Store.load_config(project_dir)
   return defaults
 end
 
+-- The persistent config keys. Everything else on a live config table is a
+-- runtime-only flag (quiet, subagent, ephemeral, sessions_dir, show_tools_json,
+-- plan) that must never be written back to disk.
+local CONFIG_KEYS = {
+  "base_url", "model", "api_key", "max_steps", "max_tokens", "request_timeout",
+  "context_limit", "compact_threshold", "permissions", "system_prompt", "host",
+}
+
+-- Persist the config whitelist to ~/.cluade/config.json. Returns ok, err.
+function Store.save_config(home, config)
+  local out = {}
+  for _, k in ipairs(CONFIG_KEYS) do
+    if config[k] ~= nil then out[k] = config[k] end
+  end
+  return _write_file(home .. "/.cluade/config.json", json.encode(out) .. "\n")
+end
+
 function Store.load_session(sessions_dir, id)
   local path = sessions_dir .. "/" .. id .. ".json"
   local raw = _read_file(path)
