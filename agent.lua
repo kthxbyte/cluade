@@ -125,6 +125,27 @@ end
 -- instead; this stands in only when a config has none (e.g. tests, old config).
 local SYSTEM_PROMPT = require("hostprobe").BASE
 
+-- Render the one-line run status from real usage figures. context_tokens is the
+-- latest prompt_tokens (actual window occupancy); completion_tokens is the
+-- session's cumulative output; the cache ratio and elapsed are shown only when
+-- available. ASCII separators keep it legible on a serial console.
+function Agent.format_status(o)
+  local limit = o.context_limit or 200000
+  local ctx = o.context_tokens or 0
+  local pct = math.floor(ctx / limit * 100 * 10) / 10
+  local parts = {
+    o.model or "?",
+    string.format("ctx %d/%d (%.1f%%)", ctx, limit, pct),
+    string.format("%d out", o.completion_tokens or 0),
+  }
+  local hit, miss = o.cache_hit or 0, o.cache_miss or 0
+  if hit + miss > 0 then
+    parts[#parts + 1] = string.format("cache %d%%", math.floor(hit / (hit + miss) * 100 + 0.5))
+  end
+  if o.elapsed then parts[#parts + 1] = o.elapsed .. "s" end
+  return table.concat(parts, " - ")
+end
+
 function Agent:init(config, cwd)
   self.config = config
   self.cwd = cwd
@@ -316,6 +337,10 @@ function Agent:run(session, input)
   local tool_names = Agent._tool_names(self.config)
   local tool_defs = self.tools.get_definitions(tool_names)
   local total_tokens = 0
+  -- Real usage from the provider payload: the latest prompt_tokens is the actual
+  -- context occupancy; completion/cache totals accumulate across the run.
+  local last_prompt_tokens = nil
+  local completion_total, cache_hit_total, cache_miss_total = 0, 0, 0
 
   local function _estimate_total()
     local total = 0
@@ -344,7 +369,12 @@ function Agent:run(session, input)
     end
 
     if response.usage then
-      total_tokens = total_tokens + (response.usage.total_tokens or response.usage.completion_tokens or 0)
+      local u = response.usage
+      total_tokens = total_tokens + (u.total_tokens or u.completion_tokens or 0)
+      if u.prompt_tokens then last_prompt_tokens = u.prompt_tokens end
+      completion_total = completion_total + (u.completion_tokens or 0)
+      cache_hit_total = cache_hit_total + (u.prompt_cache_hit_tokens or 0)
+      cache_miss_total = cache_miss_total + (u.prompt_cache_miss_tokens or 0)
     end
 
     messages[#messages + 1] = {
@@ -479,7 +509,7 @@ function Agent:run(session, input)
 
     local context_limit = self.config.context_limit or 200000
     local threshold = self.config.compact_threshold or 0.85
-    local est = _estimate_total()
+    local est = last_prompt_tokens or _estimate_total()
     if est > context_limit * threshold then
       io.write(string.format("\n" .. c.step("[context at %d%% (%d/%d). Consider compacting.]") .. "\n",
         math.floor(est / context_limit * 100), est, context_limit))
@@ -508,7 +538,12 @@ function Agent:run(session, input)
   session.messages = new_messages
   session.steps = last_step
   session.total_tokens = total_tokens
-  session.context_tokens = _estimate_total()
+  -- Prefer the provider's measured prompt size; fall back to the char estimate
+  -- only when usage carried no prompt_tokens.
+  session.context_tokens = last_prompt_tokens or _estimate_total()
+  session.completion_tokens = completion_total
+  session.cache_hit_tokens = cache_hit_total
+  session.cache_miss_tokens = cache_miss_total
   -- Ephemeral (--subagent) runs leave no trace on disk.
   if not self.config.ephemeral then
     Store.save_session(self.config.sessions_dir, session.id, session)
