@@ -44,7 +44,7 @@ local lineedit = require("lineedit")
 
 local function handle_command(line, config, sessions_dir, session)
   if line == "/help" then
-    print(c.dim("Commands: /help /exit /sessions /resume <id> /new /model <name>"))
+    print(c.dim("Commands: /help /exit /sessions /resume <id> /new /name <title> /model <name>"))
     return "continue"
   elseif line == "/exit" then
     print(c.cyan("Exiting..."))
@@ -68,16 +68,26 @@ local function handle_command(line, config, sessions_dir, session)
       session.id = loaded.id
       session.messages = loaded.messages or {}
       session.cwd = loaded.cwd or session.cwd
+      session.title = loaded.title
       print(c.cyan("Resumed session " .. id))
     end
     return "continue"
   elseif line == "/new" then
+    -- Reset in memory only; persists when first used (lazy).
     local new_s = Store.new_session_data(session.cwd or ".")
-    Store.save_session(sessions_dir, new_s.id, new_s)
     session.id = new_s.id
     session.messages = {}
     session.cwd = new_s.cwd
+    session.title = nil
     print(c.cyan("New session: " .. new_s.id))
+    return "continue"
+  elseif line:match("^/name%s+(.+)$") then
+    local t = line:match("^/name%s+(.+)$")
+    session.title = t
+    if #(session.messages or {}) > 0 and not config.ephemeral then
+      Store.save_session(sessions_dir, session.id, session)
+    end
+    print(c.cyan("Session titled: " .. t))
     return "continue"
   elseif line:match("^/model%s+(.+)$") then
     local model = line:match("^/model%s+(.+)$")
@@ -238,15 +248,16 @@ elseif args.resume then
   end
   print("resumed session " .. args.resume)
 else
+  -- Lazy persistence: build the session in memory now; the file (and the
+  -- last_session pointer) are written only once it has a first user message.
+  -- agent:run saves it at the end of the first run that produced messages.
   session = Store.new_session_data(args.cwd)
-  if not config.ephemeral then
-    Store.save_session(sessions_dir, session.id, session)
-  end
 end
 
--- An ephemeral (--subagent / --no-session) run leaves no trace: no session file
--- and no update to the "last session" pointer.
-if not config.ephemeral then
+-- Point "last session" only at a persisted (content-bearing) session: a resumed
+-- or continued session already has messages; a brand-new one gets the pointer
+-- after its first run (below). Ephemeral runs never update it.
+if not config.ephemeral and #(session.messages or {}) > 0 then
   Store.set_last_session_id(home, session.id)
 end
 
@@ -287,6 +298,7 @@ end
 
 if args.prompt then
   agent:run(session, args.prompt)
+  if not config.ephemeral then Store.set_last_session_id(home, session.id) end
   -- In quiet mode, stdout must carry only the subagent's answer -- no summary.
   if not config.quiet then
     print(c.dim("-- " .. Agent.format_status({
@@ -325,6 +337,7 @@ else
         else
           local t0 = os.time()
           agent:run(session, line)
+          if not config.ephemeral then Store.set_last_session_id(home, session.id) end
           local elapsed = os.time() - t0
           print(c.dim("-- " .. Agent.format_status({
             model = config.model, context_tokens = session.context_tokens,
