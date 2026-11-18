@@ -31,6 +31,10 @@ local hb = fresh_home()
 os.execute("HOME='" .. hb .. "' lua5.1 cluade.lua " .. OFFLINE .. " 'hello there' >/dev/null 2>&1")
 ok(count_sessions(hb) == 1, "one-shot persists exactly one session (got " .. count_sessions(hb) .. ")")
 ok(#Store.list_sessions(hb .. "/.cluade/sessions") == 1, "the persisted session lists")
+-- --list-sessions CLI output shows the title (snippet of the first message)
+local lf = io.popen("HOME='" .. hb .. "' lua5.1 cluade.lua --list-sessions 2>/dev/null")
+local lout = lf:read("*a") or ""; lf:close()
+ok(lout:find("hello there", 1, true) ~= nil, "--list-sessions CLI output shows the title")
 os.execute("rm -rf '" .. hb .. "'")
 
 if fail == 0 then print("\nALL PASS") else print("\n" .. fail .. " FAILED"); os.exit(1) end

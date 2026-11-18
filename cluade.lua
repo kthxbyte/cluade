@@ -220,7 +220,7 @@ if args.list_sessions then
     print("No sessions found.")
   else
     for _, s in ipairs(sessions) do
-      print(string.format("%s  %s  %d msgs  %s", s.id, s.created, s.messages, s.cwd))
+      print(string.format("%s  %s  %d msgs  %s", s.id, s.title or "(untitled)", s.messages, s.cwd))
     end
   end
   os.exit(0)
