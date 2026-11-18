@@ -262,12 +262,17 @@ do
   local emit = config.quiet and function(s) io.stderr:write(s .. "\n") end
     or function(s) print(s) end
   local action, msg = hostprobe.resolve(config, hostprobe.probe(), ask_fn)
-  if action == "generated" then
+  -- The fitted prompt is applied in memory for this run regardless. Persisting
+  -- it is gated on `interactive`: the spec's anti-goal forbids writing files in
+  -- --subagent/--quiet/non-tty runs, so an unattended first run uses the prompt
+  -- but leaves no config file behind. (`regenerated` only occurs interactively.)
+  if (action == "generated" or action == "regenerated") and interactive then
     Store.save_config(home, config)
-    emit("created " .. home .. "/.cluade/config.json (add your api_key)")
-  elseif action == "regenerated" then
-    Store.save_config(home, config)
-    emit("regenerated system prompt (" .. msg .. ")")
+    if action == "generated" then
+      emit("created " .. home .. "/.cluade/config.json (add your api_key)")
+    else
+      emit("regenerated system prompt (" .. msg .. ")")
+    end
   elseif action == "drift" then
     emit("note: host changed (" .. msg .. "); run --init to regenerate the system prompt")
   end
