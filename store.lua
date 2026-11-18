@@ -65,7 +65,10 @@ function Store.load_config(project_dir)
     if ok then _merge_config(defaults, parsed) end
   end
 
+  -- DEEPSEEK_API_KEY is honored too: DeepSeek is cluade's default provider, so
+  -- its conventional env var must work like OPENAI_/ANTHROPIC_API_KEY.
   local env_key = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+    or os.getenv("DEEPSEEK_API_KEY")
   if env_key and #env_key > 0 then
     defaults.api_key = env_key
   end

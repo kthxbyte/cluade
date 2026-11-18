@@ -11,6 +11,22 @@ function HttpProvider:new(config)
   return obj
 end
 
+-- DeepSeek thinking mode rejects (HTTP 400) any assistant message that carries
+-- tool_calls but no reasoning_content when it is replayed in history. The model
+-- normally returns reasoning_content, which the agent replays verbatim; this
+-- guards the gap where a turn returned none (or a session was resumed from a
+-- non-thinking provider) by defaulting it to "" -- an empty string satisfies the
+-- API. Scoped to tool-call assistant messages so the non-standard field is never
+-- introduced anywhere else. Mutates and returns `messages`.
+function HttpProvider._ensure_reasoning(messages)
+  for _, m in ipairs(messages) do
+    if m.role == "assistant" and m.tool_calls and m.reasoning_content == nil then
+      m.reasoning_content = ""
+    end
+  end
+  return messages
+end
+
 function HttpProvider:chat(messages, tools, options)
   options = options or {}
   local body = {
@@ -24,6 +40,7 @@ function HttpProvider:chat(messages, tools, options)
   if self._config.thinking ~= false then
     body.thinking = { type = "enabled" }
     body.reasoning_effort = self._config.reasoning_effort or "max"
+    HttpProvider._ensure_reasoning(messages)
   end
   if options.temperature then body.temperature = options.temperature end
   if options.max_tokens then body.max_tokens = options.max_tokens end
