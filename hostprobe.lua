@@ -94,4 +94,38 @@ function M.differs(a, b)
     or (a.python and true or false) ~= (b.python and true or false)
 end
 
+-- Decide what to do with a config given the current host probe. Mutates config
+-- (system_prompt + host) only when it generates or regenerates. ask_fn is
+-- function(question)->bool, or nil in non-interactive mode (no human to ask).
+-- Returns action, message:
+--   "generated"   first run / old config with no stored host -> built and stored
+--   "ok"          host matches the stored fingerprint -> nothing changed
+--   "regenerated" host drifted and the human approved -> rebuilt and stored
+--   "drift"       host drifted but declined or non-interactive -> nothing changed
+-- message is a short human string for every action except "ok" (nil).
+function M.resolve(config, probe, ask_fn)
+  local function apply()
+    config.system_prompt = M.build_prompt(probe)
+    config.host = M.fingerprint(probe)
+  end
+  local function label(fp) return (fp.os or "?") .. "/" .. (fp.arch or "?") end
+
+  if not config.system_prompt or not config.host then
+    apply()
+    return "generated", label(config.host)
+  end
+
+  local current = M.fingerprint(probe)
+  if not M.differs(config.host, current) then
+    return "ok", nil
+  end
+
+  local transition = label(config.host) .. " -> " .. label(current)
+  if ask_fn and ask_fn("host changed (" .. transition .. "); regenerate system prompt? [y/N]") then
+    apply()
+    return "regenerated", transition
+  end
+  return "drift", transition
+end
+
 return M
