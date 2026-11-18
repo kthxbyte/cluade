@@ -120,20 +120,10 @@ function Agent._effective_perm(base, name, params, subagent)
   return base, nil
 end
 
-local SYSTEM_PROMPT = [[You are cluade, a coding agent running on OpenWRT (busybox ash, Linux MIPS).
-You help the user with software engineering tasks.
-
-Communication:
-- Be concise. Your output is displayed on a terminal.
-- Use GitHub-flavored markdown for formatting.
-- Do not add unnecessary explanation unless asked.
-
-Environment:
-- You are running on a Linux system. Use standard Linux/ash commands.
-- Busybox tools: grep, sed, awk, find, head, tail, cut, sort are available.
-- Python is NOT available. Do not attempt Python commands.
-- The shell is ash (busybox). Use ash-compatible syntax.
-- Use /tmp for temporary files.]]
+-- The claim-free fallback base. In normal operation the host-fitted prompt in
+-- config.system_prompt (built by hostprobe at first run / drift) is used
+-- instead; this stands in only when a config has none (e.g. tests, old config).
+local SYSTEM_PROMPT = require("hostprobe").BASE
 
 function Agent:init(config, cwd)
   self.config = config
@@ -306,7 +296,7 @@ function Agent:run(session, input)
   end
 
   if #messages == 0 then
-    messages[1] = { role = "system", content = SYSTEM_PROMPT }
+    messages[1] = { role = "system", content = self.config.system_prompt or SYSTEM_PROMPT }
   end
 
   -- Rebuild the system message fresh: keep its persistent base (everything
@@ -445,7 +435,8 @@ function Agent:run(session, input)
         detector:record_result(result.status == "error")
 
         if name == "compact" and result.status == "compacted" then
-          local compact_msg = SYSTEM_PROMPT .. "\n\n[Session compressed. Summary of prior work:\n"
+          local base_prompt = self.config.system_prompt or SYSTEM_PROMPT
+          local compact_msg = base_prompt .. "\n\n[Session compressed. Summary of prior work:\n"
             .. result.summary .. "\nCurrent state preserved: open files, decisions, next steps.]"
           -- Re-add the per-turn augmentations so the steps remaining in this run
           -- still see the ./CLAUDE.md instructions and skills list. Using the
