@@ -122,12 +122,24 @@ function Store.list_sessions(sessions_dir)
       if raw then
         local ok, parsed = pcall(json.decode, raw)
         if ok then
-          sessions[#sessions + 1] = {
-            id = id,
-            created = parsed.created or "",
-            messages = #(parsed.messages or {}),
-            cwd = parsed.cwd or "",
-          }
+          local msgs = parsed.messages or {}
+          -- Skip empty sessions (none should be persisted now, but legacy ones
+          -- may exist). A title is the stored one, else a first-user snippet.
+          if #msgs > 0 then
+            local title = parsed.title
+            if not title then
+              for _, m in ipairs(msgs) do
+                if m.role == "user" then title = Store.title_snippet(m.content); break end
+              end
+            end
+            sessions[#sessions + 1] = {
+              id = id,
+              created = parsed.created or "",
+              messages = #msgs,
+              cwd = parsed.cwd or "",
+              title = title,
+            }
+          end
         end
       end
     end
