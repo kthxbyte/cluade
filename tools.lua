@@ -660,7 +660,7 @@ function Tools.execute_ask(cwd, params)
   lines[#lines + 1] = "  " .. other_idx .. ") Other"
   Tools._ask_write(table.concat(lines, "\n") .. "\n")
 
-  local line = Tools._ask_read(params.multiple and "Enter choices (comma-separated): " or "Enter choice: ") or ""
+  local line = Tools._ask_read(params.multiple and "Enter choice numbers (comma-separated): " or "Enter choice number: ") or ""
   local idxs = {}
   for tok in line:gmatch("%d+") do
     local n = tonumber(tok)

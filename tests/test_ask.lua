@@ -14,9 +14,10 @@ end
 
 -- Seam stubs.
 local answers = {}
+local last_prompt = nil
 Tools._ask_available = function() return true end
 Tools._ask_write = function() end
-Tools._ask_read = function() return table.remove(answers, 1) end
+Tools._ask_read = function(p) last_prompt = p; return table.remove(answers, 1) end
 
 local function ask(params) return Tools.execute_ask(".", params) end
 local opts3 = { { label = "A" }, { label = "B" }, { label = "C" } }
@@ -32,6 +33,7 @@ Tools._ask_available = function() return true end
 -- single-select by index
 answers = { "2" }
 ok(ask({ question = "pick", options = opts3 }).output == "B", "single-select by index")
+ok(last_prompt and last_prompt:find("number", 1, true) ~= nil, "single-select prompt asks for a number")
 
 -- options given as bare strings are normalized
 answers = { "1" }
