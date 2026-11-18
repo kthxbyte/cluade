@@ -33,6 +33,9 @@ function Agent._tool_label(name, params, args_str)
   if name == "compact" then
     return "using tool: compact"
   end
+  if name == "ask" then
+    return "using tool: ask"
+  end
   local args = (type(args_str) == "string") and args_str or json.encode(params or {})
   if #args > 200 then args = args:sub(1, 200) .. "..." end
   return "using tool: " .. name .. " " .. args
@@ -95,11 +98,13 @@ function Agent._tool_names(config)
     return { "read", "grep", "glob", "web_search", "web_fetch" }
   end
   local names = { "read", "write", "edit", "bash", "glob", "grep",
-    "web_search", "web_fetch", "remote_bash", "compact", "skill", "subagent" }
+    "web_search", "web_fetch", "remote_bash", "compact", "skill", "subagent", "ask" }
   if not config.subagent then return names end
+  -- An unattended subagent has no human to answer `ask` and must not spawn
+  -- another subagent, so both are dropped from its toolset.
   local out = {}
   for _, n in ipairs(names) do
-    if n ~= "subagent" then out[#out + 1] = n end
+    if n ~= "subagent" and n ~= "ask" then out[#out + 1] = n end
   end
   return out
 end

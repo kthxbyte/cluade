@@ -74,6 +74,7 @@ local DEFAULT_PERMISSIONS = {
   compact    = "allow",
   skill      = "allow",
   subagent   = "allow",
+  ask        = "allow",
 }
 
 -- The command that re-invokes cluade itself, set by the bootstrap (cluade.lua).
@@ -280,6 +281,34 @@ DEFS.skill = {
         name = { type = "string", description = "Name of the skill to load (e.g., brainstorming)" },
       },
       required = { "name" },
+    },
+  },
+}
+
+DEFS.ask = {
+  type = "function",
+  ["function"] = {
+    name = "ask",
+    description = "Ask the user a single question and return their answer. Provide `options` to offer choices (the user picks by number; an 'Other' choice always lets them type their own); set `multiple` to let them pick several. Omit `options` for a free-text question. Only usable in an interactive session.",
+    parameters = {
+      type = "object",
+      properties = {
+        question = { type = "string", description = "The question to put to the user" },
+        options = {
+          type = "array",
+          description = "Choices to present. Omit for a free-text question.",
+          items = {
+            type = "object",
+            properties = {
+              label = { type = "string", description = "Short choice label" },
+              description = { type = "string", description = "Optional one-line explanation" },
+            },
+            required = { "label" },
+          },
+        },
+        multiple = { type = "boolean", description = "Allow selecting more than one option (default false)" },
+      },
+      required = { "question" },
     },
   },
 }
@@ -558,6 +587,123 @@ function Tools.execute_skill(cwd, params)
   return ({ status = "error", error = msg }), _token_estimate(msg)
 end
 
+-- === ask (interactive user prompt) ===
+-- Terminal I/O lives behind these seams so the choice/parse logic is testable
+-- without a real terminal. The real reads cook the controlling tty (like
+-- Agent:prompt_yes_no) and restore the prior mode after -- done here rather than
+-- reusing Agent's helpers, because tools.lua must not require("agent") (circular).
+
+function Tools._ask_available()
+  local f = io.popen("stty -g 2>/dev/null </dev/tty")
+  local saved = f and f:read("*l")
+  if f then f:close() end
+  return saved ~= nil and saved ~= ""
+end
+
+function Tools._ask_write(text)
+  io.write(text)
+  io.flush()
+end
+
+function Tools._ask_read(prompt)
+  local f = io.popen("stty -g 2>/dev/null </dev/tty")
+  local saved = f and f:read("*l")
+  if f then f:close() end
+  if saved and #saved > 0 then os.execute("stty icanon echo 2>/dev/null </dev/tty") end
+  io.write(prompt); io.flush()
+  local line = io.read("*l")
+  if saved and #saved > 0 then os.execute("stty " .. saved .. " 2>/dev/null </dev/tty") end
+  return line
+end
+
+local function _normalize_options(options)
+  if type(options) ~= "table" then return {} end
+  local out = {}
+  for _, o in ipairs(options) do
+    if type(o) == "string" and #o > 0 then
+      out[#out + 1] = { label = o }
+    elseif type(o) == "table" and type(o.label) == "string" and #o.label > 0 then
+      out[#out + 1] = { label = o.label, description = o.description }
+    end
+  end
+  return out
+end
+
+local function _trim(s)
+  return s and (s:gsub("^%s+", ""):gsub("%s+$", "")) or ""
+end
+
+function Tools.execute_ask(cwd, params)
+  params = params or {}
+  if not params.question or params.question == "" then
+    return { status = "error", error = "ask requires a 'question'" }
+  end
+  if not Tools._ask_available() then
+    return { status = "error", error = "ask: no interactive user available" }
+  end
+
+  local opts = _normalize_options(params.options)
+
+  -- Free-text question: no options.
+  if #opts == 0 then
+    Tools._ask_write(params.question .. "\n")
+    local text = _trim(Tools._ask_read("> "))
+    return { status = "ok", output = (#text > 0) and text or "(no answer)" }
+  end
+
+  -- Choice question: numbered list plus an "Other" escape at index #opts+1.
+  local lines = { params.question }
+  for i, o in ipairs(opts) do
+    lines[#lines + 1] = "  " .. i .. ") " .. o.label .. (o.description and (" — " .. o.description) or "")
+  end
+  local other_idx = #opts + 1
+  lines[#lines + 1] = "  " .. other_idx .. ") Other"
+  Tools._ask_write(table.concat(lines, "\n") .. "\n")
+
+  local line = _trim(Tools._ask_read(params.multiple and "Enter choice numbers (comma-separated): " or "Enter choice number: ") or "")
+  if line == "" then return { status = "ok", output = "(no answer)" } end
+  -- Only a pure numbers/commas/spaces line is treated as a selection. Anything
+  -- else is the user steering ("none of these, do Z instead") -- pass it to the
+  -- model verbatim rather than mining it for digits or dropping it as no-answer.
+  if not line:match("^[%d%s,]+$") then
+    return { status = "ok", output = line }
+  end
+  local idxs = {}
+  for tok in line:gmatch("%d+") do
+    local n = tonumber(tok)
+    if n and n >= 1 and n <= other_idx then idxs[#idxs + 1] = n end
+  end
+
+  local function read_other()
+    local t = _trim(Tools._ask_read("Other: "))
+    return (#t > 0) and t or nil
+  end
+
+  if not params.multiple then
+    local first = idxs[1]
+    if not first then return { status = "ok", output = "(no answer)" } end
+    if first == other_idx then
+      return { status = "ok", output = read_other() or "(no answer)" }
+    end
+    return { status = "ok", output = opts[first].label }
+  end
+
+  local chosen, did_other = {}, false
+  for _, n in ipairs(idxs) do
+    if n == other_idx then
+      if not did_other then
+        did_other = true
+        local t = read_other()
+        if t then chosen[#chosen + 1] = t end
+      end
+    else
+      chosen[#chosen + 1] = opts[n].label
+    end
+  end
+  if #chosen == 0 then return { status = "ok", output = "(no answer)" } end
+  return { status = "ok", output = table.concat(chosen, ", ") }
+end
+
 -- === registry ===
 
 local EXECUTORS = {
@@ -573,6 +719,7 @@ local EXECUTORS = {
   compact     = Tools.execute_compact,
   skill       = Tools.execute_skill,
   subagent    = Tools.execute_subagent,
+  ask         = Tools.execute_ask,
 }
 
 function Tools.get_definitions(names)
