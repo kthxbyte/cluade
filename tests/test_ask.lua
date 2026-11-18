@@ -55,9 +55,25 @@ ok(ask({ question = "pick", multiple = true, options = opts3 }).output == "A, C"
 answers = { "2,4", "x" }
 ok(ask({ question = "pick", multiple = true, options = opts3 }).output == "B, x", "multi-select + Other")
 
--- garbage / out-of-range tokens ignored
+-- non-numeric input is passed through verbatim: at a choice prompt the user is
+-- steering ("none of these, do Z"), not selecting -- their words reach the model.
 answers = { "9,foo,2" }
-ok(ask({ question = "pick", options = opts3 }).output == "B", "garbage/out-of-range ignored")
+ok(ask({ question = "pick", options = opts3 }).output == "9,foo,2", "mixed/non-numeric input passed through as free text")
+
+answers = { "none of these, do Z instead" }
+ok(ask({ question = "pick", options = opts3 }).output == "none of these, do Z instead", "prose answer at a choice prompt is passed through")
+
+-- ambiguous numeric-ish prose is NOT guessed into an index
+answers = { "option 2" }
+ok(ask({ question = "pick", options = opts3 }).output == "option 2", "'option 2' passed through, not resolved to an index")
+
+-- a pure but out-of-range number -> no valid index -> no answer (model re-asks)
+answers = { "9" }
+ok(ask({ question = "pick", options = opts3 }).output == "(no answer)", "out-of-range number -> no answer")
+
+-- prose at a multi-select prompt is passed through too
+answers = { "skip all, just summarize" }
+ok(ask({ question = "pick", multiple = true, options = opts3 }).output == "skip all, just summarize", "prose at a multi-select prompt passed through")
 
 -- Other chosen but left blank -> dropped -> no answer
 answers = { "4", "" }

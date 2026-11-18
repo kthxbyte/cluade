@@ -73,7 +73,11 @@ free-text).
   map each valid index to its label; `N+1` included ⇒ append a free-text answer.
   Result = the chosen labels joined by `, `.
 - **no options** → print the question, read one line. Result = that text.
-- Empty/blank/unparseable input ⇒ result output `(no answer)`.
+- A choice answer that is **not** a pure numbers/commas/spaces line is passed to
+  the model **verbatim** (the user steering off-menu — "none of these, do Z"),
+  not mined for digits. A pure-but-out-of-range number, or empty input, ⇒
+  `(no answer)`. (Refined during implementation: capture the user's steer rather
+  than guess or drop it.)
 - Result shape: `{ status = "ok", output = <answer string> }` (the model reads the
   tool message content, so a readable string suffices).
 

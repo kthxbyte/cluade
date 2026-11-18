@@ -660,7 +660,14 @@ function Tools.execute_ask(cwd, params)
   lines[#lines + 1] = "  " .. other_idx .. ") Other"
   Tools._ask_write(table.concat(lines, "\n") .. "\n")
 
-  local line = Tools._ask_read(params.multiple and "Enter choice numbers (comma-separated): " or "Enter choice number: ") or ""
+  local line = _trim(Tools._ask_read(params.multiple and "Enter choice numbers (comma-separated): " or "Enter choice number: ") or "")
+  if line == "" then return { status = "ok", output = "(no answer)" } end
+  -- Only a pure numbers/commas/spaces line is treated as a selection. Anything
+  -- else is the user steering ("none of these, do Z instead") -- pass it to the
+  -- model verbatim rather than mining it for digits or dropping it as no-answer.
+  if not line:match("^[%d%s,]+$") then
+    return { status = "ok", output = line }
+  end
   local idxs = {}
   for tok in line:gmatch("%d+") do
     local n = tonumber(tok)
